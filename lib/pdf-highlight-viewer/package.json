@@ -1,0 +1,56 @@
+{
+  "name": "pdf-highlight-viewer",
+  "version": "1.0.0",
+  "description": "High-performance PDF viewer with intelligent highlighting and text selection capabilities",
+  "main": "dist/index.js",
+  "module": "dist/index.esm.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist",
+    "styles",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "npm run build:ts && npm run build:css",
+    "build:ts": "tsc -p tsconfig.json",
+    "build:css": "cp styles/*.css dist/",
+    "dev": "tsc -w",
+    "test": "jest",
+    "test:watch": "jest --watch",
+    "lint": "eslint . --ext .ts,.tsx",
+    "typecheck": "tsc --noEmit"
+  },
+  "keywords": [
+    "pdf",
+    "viewer",
+    "highlight",
+    "annotation",
+    "text-selection",
+    "ner",
+    "named-entity-recognition",
+    "performance",
+    "typescript"
+  ],
+  "author": "Podruzhinskii Stanislav",
+  "license": "MIT",
+  "peerDependencies": {
+    "pdfjs-dist": "^5.4.149"
+  },
+  "devDependencies": {
+    "@typescript-eslint/eslint-plugin": "^6.0.0",
+    "@typescript-eslint/parser": "^6.0.0",
+    "eslint": "^8.0.0",
+    "typescript": "^5.0.0"
+  },
+  "engines": {
+    "node": ">=14.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/your-username/pdf-highlight-viewer.git"
+  },
+  "homepage": "https://github.com/your-username/pdf-highlight-viewer#readme",
+  "bugs": {
+    "url": "https://github.com/your-username/pdf-highlight-viewer/issues"
+  }
+}

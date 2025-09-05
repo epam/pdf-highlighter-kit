@@ -1,0 +1,474 @@
+.pdf-highlight-viewer {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  overflow: auto;
+  background: #f5f5f5;
+  contain: layout style paint;
+}
+
+.pdf-container {
+  position: relative;
+  margin: 0 auto;
+  padding: 20px;
+  contain: layout style paint;
+}
+
+.pdf-page-container {
+  position: relative;
+  margin: 0 auto 20px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  background: white;
+  contain: layout style paint;
+}
+
+.pdf-canvas {
+  position: relative;
+  z-index: 1;
+  display: block;
+  width: 100%;
+  height: auto;
+  user-select: none;
+}
+
+.unified-layer {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 2;
+  pointer-events: none;
+  opacity: 0.01;
+  contain: layout style;
+}
+
+.unified-layer .text-segment,
+.unified-layer .highlight-wrapper {
+  pointer-events: auto;
+}
+
+.text-segment {
+  position: absolute;
+  white-space: pre;
+  transform-origin: 0% 0%;
+  user-select: text;
+  color: transparent;
+  line-height: 1;
+  margin: 0;
+  padding: 0;
+  border: none;
+  outline: none;
+  background: none;
+}
+
+.text-segment.selectable {
+  cursor: text;
+}
+
+.highlight-wrapper {
+  position: absolute;
+  cursor: pointer;
+  transform-origin: 0% 0%;
+  transition: opacity 0.2s ease;
+  contain: layout style;
+}
+
+.highlight-wrapper:hover {
+  z-index: 3;
+}
+
+.highlight-background {
+  position: absolute;
+  inset: -2px;
+  z-index: -1;
+  border-radius: 3px;
+  transition: opacity 0.2s ease, transform 0.2s ease;
+  will-change: opacity, transform;
+}
+
+.highlight-wrapper:hover .highlight-background {
+  transform: scale(1.02);
+}
+
+.protein-highlight .highlight-background {
+  background: rgba(255, 200, 0, 0.3);
+  border: 1px solid rgba(255, 180, 0, 0.6);
+}
+
+.protein-highlight:hover .highlight-background {
+  background: rgba(255, 200, 0, 0.5);
+  border-color: rgba(255, 160, 0, 0.8);
+}
+
+.protein-highlight.selected .highlight-background {
+  background: rgba(255, 200, 0, 0.7);
+  border: 2px solid rgba(255, 140, 0, 1);
+  outline: 2px solid #007acc;
+  outline-offset: 1px;
+}
+
+.gene-highlight .highlight-background {
+  background: rgba(0, 200, 100, 0.3);
+  border: 1px solid rgba(0, 180, 90, 0.6);
+}
+
+.gene-highlight:hover .highlight-background {
+  background: rgba(0, 200, 100, 0.5);
+  border-color: rgba(0, 160, 80, 0.8);
+}
+
+.gene-highlight.selected .highlight-background {
+  background: rgba(0, 200, 100, 0.7);
+  border: 2px solid rgba(0, 140, 70, 1);
+  outline: 2px solid #007acc;
+  outline-offset: 1px;
+}
+
+.disease-highlight .highlight-background {
+  background: rgba(220, 50, 50, 0.3);
+  border: 1px solid rgba(200, 40, 40, 0.6);
+}
+
+.disease-highlight:hover .highlight-background {
+  background: rgba(220, 50, 50, 0.5);
+  border-color: rgba(180, 30, 30, 0.8);
+}
+
+.disease-highlight.selected .highlight-background {
+  background: rgba(220, 50, 50, 0.7);
+  border: 2px solid rgba(160, 20, 20, 1);
+  outline: 2px solid #007acc;
+  outline-offset: 1px;
+}
+
+.chemical-highlight .highlight-background {
+  background: rgba(0, 150, 255, 0.3);
+  border: 1px solid rgba(0, 130, 235, 0.6);
+}
+
+.chemical-highlight:hover .highlight-background {
+  background: rgba(0, 150, 255, 0.5);
+  border-color: rgba(0, 110, 215, 0.8);
+}
+
+.chemical-highlight.selected .highlight-background {
+  background: rgba(0, 150, 255, 0.7);
+  border: 2px solid rgba(0, 90, 195, 1);
+  outline: 2px solid #007acc;
+  outline-offset: 1px;
+}
+
+.species-highlight .highlight-background {
+  background: rgba(150, 100, 200, 0.3);
+  border: 1px solid rgba(130, 80, 180, 0.6);
+}
+
+.species-highlight:hover .highlight-background {
+  background: rgba(150, 100, 200, 0.5);
+  border-color: rgba(110, 60, 160, 0.8);
+}
+
+.species-highlight.selected .highlight-background {
+  background: rgba(150, 100, 200, 0.7);
+  border: 2px solid rgba(90, 40, 140, 1);
+  outline: 2px solid #007acc;
+  outline-offset: 1px;
+}
+
+.pdf-highlight-viewer.scrolling .unified-layer {
+  will-change: transform;
+}
+
+.pdf-highlight-viewer.scrolling .highlight-background {
+  transition: none;
+}
+
+.highlight-background {
+  transform: translateZ(0);
+  backface-visibility: hidden;
+}
+
+.highlight-wrapper {
+  contain: layout style paint;
+}
+
+.text-segment::selection {
+  background: rgba(0, 123, 255, 0.3);
+  color: transparent;
+}
+
+.text-segment::-moz-selection {
+  background: rgba(0, 123, 255, 0.3);
+  color: transparent;
+}
+
+.highlight-wrapper .text-segment::selection {
+  background: rgba(255, 255, 255, 0.5);
+  color: transparent;
+}
+
+.highlight-wrapper .text-segment::-moz-selection {
+  background: rgba(255, 255, 255, 0.5);
+  color: transparent;
+}
+
+.pdf-page-container.loading {
+  opacity: 0.7;
+}
+
+.pdf-page-container.loading::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 32px;
+  height: 32px;
+  margin: -16px 0 0 -16px;
+  border: 3px solid #f3f3f3;
+  border-top: 3px solid #007acc;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+.search-result-highlight .highlight-background {
+  background: rgba(255, 255, 0, 0.4) !important;
+  border: 2px solid rgba(255, 215, 0, 0.8) !important;
+  animation: pulse-search 1s ease-in-out infinite alternate;
+}
+
+@keyframes pulse-search {
+  from { opacity: 0.4; }
+  to { opacity: 0.8; }
+}
+
+@media (prefers-contrast: high) {
+  .highlight-background {
+    border-width: 2px !important;
+    opacity: 0.8 !important;
+  }
+  
+  .protein-highlight .highlight-background {
+    background: rgba(255, 200, 0, 0.6);
+    border-color: rgba(255, 140, 0, 1);
+  }
+  
+  .gene-highlight .highlight-background {
+    background: rgba(0, 200, 100, 0.6);
+    border-color: rgba(0, 140, 70, 1);
+  }
+  
+  .disease-highlight .highlight-background {
+    background: rgba(220, 50, 50, 0.6);
+    border-color: rgba(160, 20, 20, 1);
+  }
+  
+  .chemical-highlight .highlight-background {
+    background: rgba(0, 150, 255, 0.6);
+    border-color: rgba(0, 90, 195, 1);
+  }
+  
+  .species-highlight .highlight-background {
+    background: rgba(150, 100, 200, 0.6);
+    border-color: rgba(90, 40, 140, 1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .highlight-background,
+  .highlight-wrapper {
+    transition: none !important;
+    animation: none !important;
+  }
+}
+
+.highlight-wrapper:focus {
+  outline: 2px solid #007acc;
+  outline-offset: 2px;
+}
+
+.highlight-wrapper:focus .highlight-background {
+  opacity: 0.8;
+  transform: scale(1.05);
+}
+
+.pdf-context-menu {
+  position: fixed;
+  background: white;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  z-index: 1000;
+  min-width: 180px;
+  padding: 4px 0;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-size: 14px;
+}
+
+.pdf-context-menu-item {
+  padding: 8px 16px;
+  cursor: pointer;
+  border: none;
+  background: none;
+  width: 100%;
+  text-align: left;
+  color: #333;
+}
+
+.pdf-context-menu-item:hover {
+  background: #f0f0f0;
+}
+
+.pdf-context-menu-item:disabled {
+  color: #999;
+  cursor: not-allowed;
+}
+
+.pdf-context-menu-separator {
+  height: 1px;
+  background: #eee;
+  margin: 4px 0;
+}
+
+.pdf-tooltip {
+  position: fixed;
+  background: rgba(0, 0, 0, 0.8);
+  color: white;
+  padding: 8px 12px;
+  border-radius: 4px;
+  font-size: 12px;
+  z-index: 1001;
+  pointer-events: none;
+  max-width: 300px;
+  word-wrap: break-word;
+}
+
+.pdf-tooltip::after {
+  content: '';
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  margin-left: -5px;
+  width: 0;
+  height: 0;
+  border: 5px solid transparent;
+  border-top-color: rgba(0, 0, 0, 0.8);
+}
+
+@media (max-width: 768px) {
+  .pdf-container {
+    padding: 10px;
+  }
+  
+  .pdf-page-container {
+    margin-bottom: 10px;
+  }
+  
+  .highlight-wrapper {
+    min-width: 44px;
+    min-height: 44px;
+  }
+  
+  .pdf-context-menu {
+    min-width: 200px;
+    font-size: 16px;
+  }
+  
+  .pdf-context-menu-item {
+    padding: 12px 16px;
+  }
+}
+
+@media print {
+  .pdf-highlight-viewer {
+    background: white;
+  }
+  
+  .pdf-page-container {
+    box-shadow: none;
+    margin-bottom: 0;
+    page-break-after: always;
+  }
+  
+  .highlight-background {
+    opacity: 0.6 !important;
+    transition: none;
+  }
+  
+  .pdf-context-menu,
+  .pdf-tooltip {
+    display: none !important;
+  }
+}
+
+@media (prefers-color-scheme: dark) {
+  .pdf-highlight-viewer {
+    background: #1a1a1a;
+  }
+  
+  .pdf-page-container {
+    background: #2a2a2a;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+  }
+  
+  .pdf-context-menu {
+    background: #333;
+    border-color: #555;
+    color: white;
+  }
+  
+  .pdf-context-menu-item {
+    color: white;
+  }
+  
+  .pdf-context-menu-item:hover {
+    background: #555;
+  }
+  
+  .pdf-context-menu-separator {
+    background: #555;
+  }
+}
+
+.highlight-enter {
+  opacity: 0;
+  transform: scale(0.8);
+}
+
+.highlight-enter-active {
+  opacity: 1;
+  transform: scale(1);
+  transition: opacity 0.3s ease, transform 0.3s ease;
+}
+
+.highlight-exit {
+  opacity: 1;
+  transform: scale(1);
+}
+
+.highlight-exit-active {
+  opacity: 0;
+  transform: scale(0.8);
+  transition: opacity 0.3s ease, transform 0.3s ease;
+}
+
+.pdf-hidden {
+  display: none !important;
+}
+
+.pdf-invisible {
+  visibility: hidden !important;
+}
+
+.pdf-no-select {
+  user-select: none !important;
+}
+
+.pdf-no-pointer-events {
+  pointer-events: none !important;
+}
