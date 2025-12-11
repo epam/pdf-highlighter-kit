@@ -211,7 +211,7 @@ export interface CategoryStyle {
 export interface CategoryStyleManager {
   registerCategory(name: string, style: CategoryStyle): void;
   getComputedStyle(
-    termId: string, 
+    termId: string,
     state: 'default' | 'hover' | 'selected'
   ): React.CSSProperties;
 }
@@ -258,6 +258,10 @@ export interface Page {
   scale?: number;
 }
 
+export interface HighlightsConfig {
+  enableMultilineHover?: boolean;
+  getHighlightColor?: (termId: string) => string;
+}
 
 export interface ViewerOptions {
   enableTextSelection?: boolean;
@@ -267,6 +271,7 @@ export interface ViewerOptions {
   interactionMode?: InteractionMode;
   performanceMode?: boolean;
   accessibility?: boolean;
+  highlightsConfig?: HighlightsConfig;
 }
 
 export interface AccessibilityFeatures {
@@ -295,14 +300,14 @@ export interface EventSystem {
   onHighlightHover: (event: HighlightHoverEvent) => void;
   onHighlightClick: (event: HighlightClickEvent) => void;
   onHighlightSelect: (event: HighlightSelectEvent) => void;
-  
+
   onTextSelected: (event: TextSelectionEvent) => void;
   onSelectionCopied: (event: SelectionCopyEvent) => void;
   onSelectionHighlighted: (event: SelectionHighlightEvent) => void;
-  
+
   onPageChanged: (event: PageChangeEvent) => void;
   onZoomChanged: (event: ZoomChangeEvent) => void;
-  
+
   onRenderComplete: (event: RenderCompleteEvent) => void;
   onPerformanceWarning: (event: PerformanceWarningEvent) => void;
 }
