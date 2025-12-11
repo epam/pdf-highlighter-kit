@@ -197,3 +197,31 @@
   font-family: 'SF Mono', 'Monaco', 'Inconsolata', monospace;
   color: #374151;
 }
+
+.zoom-input {
+  width: 50px;
+  padding: 4px 8px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  text-align: center;
+  font-size: 14px;
+  font-family: inherit;
+  transition: border-color 0.2s;
+}
+
+.zoom-input:focus {
+  outline: none;
+  border-color: #2563eb;
+  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.1);
+}
+
+.zoom-input:invalid {
+  border-color: #dc2626;
+}
+
+.zoom-unit {
+  margin-left: -4px;
+  margin-right: 8px;
+  font-size: 14px;
+  color: #666;
+}

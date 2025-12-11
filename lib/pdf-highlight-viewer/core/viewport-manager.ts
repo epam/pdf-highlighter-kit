@@ -4,7 +4,7 @@ import { ViewportManager as IViewportManager, Priority, Viewport, BoundingBox } 
 export class ViewportManager implements IViewportManager {
   private containerHeight: number = 0;
   private pageHeight: number = 800; // Default page height
-  private pageGap: number = 10; // Gap between pages
+  private pageGap: number = 20; // Gap between pages
   private bufferSize: number;
   private maxCachedPages: number;
   private totalPages: number = 0;

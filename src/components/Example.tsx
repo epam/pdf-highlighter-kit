@@ -25,6 +25,7 @@ export const KriegerPDFDemo: React.FC<KriegerPDFDemoProps> = ({ className = '' }
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(0);
   const [zoom, setZoom] = useState(1.5);
+  const [zoomInput, setZoomInput] = useState('100');
   const [error, setError] = useState<string | null>(null);
   const [visibleCategories, setVisibleCategories] = useState<Set<string>>(new Set());
   const [isTextSelectionEnabled, setIsTextSelectionEnabled] = useState(true);
@@ -220,6 +221,10 @@ export const KriegerPDFDemo: React.FC<KriegerPDFDemoProps> = ({ className = '' }
     }
   }, [filteredHighlightData, isLoaded]);
 
+    useEffect(() => {
+    setZoomInput(Math.round(zoom * 100).toString());
+  }, [zoom]);
+
   const findTermById = (termId: string) => {
     for (const categoryData of Object.values(highlightData)) {
       if (categoryData.terms[termId]) {
@@ -247,8 +252,42 @@ export const KriegerPDFDemo: React.FC<KriegerPDFDemoProps> = ({ className = '' }
     return occurrences;
   };
 
-  const handleZoomIn = () => viewerRef.current?.setZoom(zoom * 1.2);
-  const handleZoomOut = () => viewerRef.current?.setZoom(zoom / 1.2);
+  const handleZoomIn = () => viewerRef.current?.setZoom(zoom + 0.25);
+  const handleZoomOut = () => viewerRef.current?.setZoom(zoom - 0.25);
+  const handleZoomInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value;
+    if (value === '' || /^\d+$/.test(value)) {
+      setZoomInput(value);
+    }
+  };
+
+  const handleZoomInputBlur = () => {
+    const numValue = parseInt(zoomInput, 10);
+    
+    if (isNaN(numValue) || numValue < 50) {
+      const newZoom = 0.5;
+      viewerRef.current?.setZoom(newZoom);
+      setZoomInput('50');
+    } else if (numValue > 400) {
+      const newZoom = 4.0;
+      viewerRef.current?.setZoom(newZoom);
+      setZoomInput('400');
+    } else {
+      const newZoom = numValue / 100;
+      viewerRef.current?.setZoom(newZoom);
+      setZoomInput(numValue.toString());
+    }
+  };
+
+    const handleZoomInputKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') {
+      (e.target as HTMLInputElement).blur();
+    } else if (e.key === 'Escape') {
+      setZoomInput(Math.round(zoom * 100).toString());
+      (e.target as HTMLInputElement).blur();
+    }
+  };
+
   const handlePageChange = (page: number) => viewerRef.current?.setPage(page);
   const handleCategoryToggle = (category: string) => {
     setVisibleCategories(prev => {
@@ -273,8 +312,19 @@ export const KriegerPDFDemo: React.FC<KriegerPDFDemoProps> = ({ className = '' }
       <div className="controls">
         <div className="controls-group">
           <button onClick={handleZoomOut} disabled={zoom <= 0.5}>−</button>
-          <span className="zoom-display">{Math.round(zoom * 100)}%</span>
-          <button onClick={handleZoomIn} disabled={zoom >= 5}>+</button>
+           <input
+            type="text"
+            className="zoom-input"
+            value={zoomInput}
+            onChange={handleZoomInputChange}
+            onBlur={handleZoomInputBlur}
+            onKeyDown={handleZoomInputKeyDown}
+            placeholder="100"
+            aria-label="Zoom percentage"
+          />
+          <span className="zoom-unit">%</span>
+
+          <button onClick={handleZoomIn} disabled={zoom >= 4}>+</button>
         </div>
         
         <div className="controls-group">
