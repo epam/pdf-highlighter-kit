@@ -1,8 +1,8 @@
 
-import { 
-  InteractionIntent, 
-  InteractionMode, 
-  SelectionState, 
+import {
+  InteractionIntent,
+  InteractionMode,
+  SelectionState,
   TextRange,
   SelectionWithMetadata,
   TermOccurrence,
@@ -13,6 +13,7 @@ import {
 
 export interface InteractionCallbacks {
   onHighlightHover?: (event: HighlightHoverEvent) => void;
+  onHighlightBlur?: (termId: string) => void;
   onHighlightClick?: (event: HighlightClickEvent) => void;
   onTextSelected?: (event: TextSelectionEvent) => void;
   onSelectionChanged?: (selection: string) => void;
@@ -23,7 +24,8 @@ export class UnifiedInteractionHandler {
   private container: HTMLElement | null = null;
   private interactionMode: InteractionMode = 'hybrid';
   private callbacks: InteractionCallbacks = {};
-  
+  private hoveredTermId: string | null = null;
+
   private selectionState: SelectionState = {
     isSelecting: false,
     startPoint: null,
@@ -36,7 +38,7 @@ export class UnifiedInteractionHandler {
   private dragStartTime = 0;
   private dragThreshold = 5;
   private clickTimeout = 200;
-  
+
   private eventListeners: Array<{ element: Element | Document; event: string; handler: EventListener }> = [];
 
   constructor(callbacks: InteractionCallbacks = {}) {
@@ -73,7 +75,7 @@ export class UnifiedInteractionHandler {
   private detectIntent(event: MouseEvent): InteractionIntent {
     const target = event.target as HTMLElement;
     const highlight = target.closest('.highlight-wrapper');
-    
+
     if (event.shiftKey || event.ctrlKey) return 'text-select';
     if (event.altKey) return 'highlight-interact';
 
@@ -93,7 +95,7 @@ export class UnifiedInteractionHandler {
 
   private isSelectionGesture(event: MouseEvent): boolean {
     if (event.detail === 2) return true;
-    
+
     return false;
   }
 
@@ -102,9 +104,9 @@ export class UnifiedInteractionHandler {
 
     this.isMouseDown = true;
     this.dragStartTime = Date.now();
-    
+
     const intent = this.detectIntent(event);
-    
+
     this.selectionState.startPoint = { x: event.clientX, y: event.clientY };
     this.selectionState.isSelecting = false;
 
@@ -128,7 +130,7 @@ export class UnifiedInteractionHandler {
     }
 
     const currentPoint = { x: event.clientX, y: event.clientY };
-    
+
     if (this.selectionState.startPoint) {
       const distance = Math.sqrt(
         Math.pow(currentPoint.x - this.selectionState.startPoint.x, 2) +
@@ -150,7 +152,7 @@ export class UnifiedInteractionHandler {
     if (event.button !== 0) return;
 
     this.isMouseDown = false;
-    
+
     if (this.selectionState.isSelecting) {
       this.finishTextSelection(event);
     }
@@ -163,7 +165,7 @@ export class UnifiedInteractionHandler {
   private handleClick(event: MouseEvent): void {
     const target = event.target as HTMLElement;
     const highlight = target.closest('.highlight-wrapper') || target.closest('.highlight');
-    
+
     if (highlight && this.interactionMode !== 'select') {
       this.handleHighlightClick(event, highlight);
     }
@@ -185,7 +187,7 @@ export class UnifiedInteractionHandler {
       this.selectAllText();
       event.preventDefault();
     }
-    
+
     if (event.key === 'Escape') {
       this.clearSelection();
     }
@@ -242,8 +244,11 @@ export class UnifiedInteractionHandler {
     if (highlight) {
       const termId = highlight.getAttribute('data-term-id');
       if (termId) {
+        this.hoveredTermId = termId;
         this.handleHighlightHover(event, highlight, termId);
       }
+    } else if (this.hoveredTermId) {
+      this.handleHighlightBlur(event, this.hoveredTermId);
     }
   }
 
@@ -269,9 +274,16 @@ export class UnifiedInteractionHandler {
     }
   }
 
+  private handleHighlightBlur(event: MouseEvent, termId: string): void {
+    this.hoveredTermId = null;
+    if (this.callbacks.onHighlightBlur) {
+      this.callbacks.onHighlightBlur(termId);
+    }
+  }
+
   private handleHighlightClick(event: MouseEvent, element: Element): void {
     const termId = element.getAttribute('data-term-id');
-    
+
     if (!termId) {
       return;
     }
@@ -312,11 +324,11 @@ export class UnifiedInteractionHandler {
 
     const range = selection.getRangeAt(0);
     const selectedText = selection.toString().trim();
-    
+
     if (selectedText === '') return;
 
     const highlights = this.findHighlightsInRange(range);
-    
+
     const pages = this.getPagesFromRange(range);
 
     const selectionEvent: TextSelectionEvent = {
@@ -333,7 +345,7 @@ export class UnifiedInteractionHandler {
 
   private findHighlightsInRange(range: Range): TermOccurrence[] {
     const highlights: TermOccurrence[] = [];
-    
+
     const container = range.commonAncestorContainer;
     const walker = document.createTreeWalker(
       container.nodeType === Node.TEXT_NODE ? container.parentNode! : container,
@@ -341,7 +353,7 @@ export class UnifiedInteractionHandler {
       {
         acceptNode: (node: Element) => {
           return (node.classList.contains('highlight-wrapper') || node.classList.contains('highlight'))
-            ? NodeFilter.FILTER_ACCEPT 
+            ? NodeFilter.FILTER_ACCEPT
             : NodeFilter.FILTER_SKIP;
         }
       }
@@ -370,15 +382,15 @@ export class UnifiedInteractionHandler {
 
   private getPagesFromRange(range: Range): number[] {
     const pages = new Set<number>();
-    
+
     const container = range.commonAncestorContainer;
     const walker = document.createTreeWalker(
       container.nodeType === Node.TEXT_NODE ? container.parentNode! : container,
       NodeFilter.SHOW_ELEMENT,
       {
         acceptNode: (node: Element) => {
-          return node.classList.contains('pdf-page-container') 
-            ? NodeFilter.FILTER_ACCEPT 
+          return node.classList.contains('pdf-page-container')
+            ? NodeFilter.FILTER_ACCEPT
             : NodeFilter.FILTER_SKIP;
         }
       }
@@ -443,7 +455,7 @@ export class UnifiedInteractionHandler {
 
     const range = selection.getRangeAt(0);
     const text = selection.toString().trim();
-    
+
     if (text === '') return null;
 
     return {
@@ -459,15 +471,15 @@ export class UnifiedInteractionHandler {
     const contextLength = 50;
     const container = range.commonAncestorContainer;
     const fullText = container.textContent || '';
-    
+
     const selectedText = range.toString();
     const startIndex = fullText.indexOf(selectedText);
-    
+
     if (startIndex === -1) return '';
 
     const contextStart = Math.max(0, startIndex - contextLength);
     const contextEnd = Math.min(fullText.length, startIndex + selectedText.length + contextLength);
-    
+
     return fullText.substring(contextStart, contextEnd);
   }
 

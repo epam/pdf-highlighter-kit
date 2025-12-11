@@ -38,7 +38,7 @@ export class PDFHighlightViewer implements IPDFHighlightViewer {
   private totalPages = 0;
   private selectedTermId: string | null = null;
   private isInitialized = false;
-  
+
   private pageDimensions = new Map<number, { width: number; height: number }>();
   private defaultPageHeight = 800;
 
@@ -74,6 +74,7 @@ export class PDFHighlightViewer implements IPDFHighlightViewer {
     // Setup interaction callbacks
     const interactionCallbacks: InteractionCallbacks = {
       onHighlightHover: (event) => this.emit('highlightHover', event),
+      onHighlightBlur: (termId) => this.emit('highlightBlur', termId),
       onHighlightClick: (event) => this.emit('highlightClick', event),
       onTextSelected: (event) => this.emit('textSelected', event),
       onSelectionChanged: (selection) => this.emit('selectionChanged', selection),
@@ -395,16 +396,16 @@ export class PDFHighlightViewer implements IPDFHighlightViewer {
       // Get PDF page and its viewport at current scale
       const page = await this.pdfEngine.getPage(pageNumber);
       const viewport = page.getViewport({ scale: this.currentScale });
-      
+
       const dimensions = {
         width: viewport.width,
         height: viewport.height
       };
-      
+
       // Cache the dimensions
       this.pageDimensions.set(pageNumber, dimensions);
       return dimensions;
-      
+
     } catch (error) {
       console.error(`Failed to get dimensions for page ${pageNumber}:`, error);
       return { width: 600, height: this.defaultPageHeight };
@@ -473,7 +474,7 @@ export class PDFHighlightViewer implements IPDFHighlightViewer {
     try {
       // Load document with PDF engine
       await this.pdfEngine.loadDocument(source);
-      
+
       const docInfo = this.pdfEngine.getDocumentInfo();
       this.totalPages = docInfo.numPages;
 
@@ -545,7 +546,7 @@ export class PDFHighlightViewer implements IPDFHighlightViewer {
 
     // Get what should be visible at the top
     const visiblePages = this.viewportManager.getVisiblePages(0, this.container.clientHeight);
-    
+
     // Load first page immediately
     try {
       await this.renderPage(1);
@@ -575,7 +576,7 @@ export class PDFHighlightViewer implements IPDFHighlightViewer {
       console.log(`Page ${pageNumber}: skipping, already has 'rendered' class`);
       return;
     }
-    
+
     console.log(`Page ${pageNumber}: rendering at scale ${this.currentScale}`);
 
     try {
@@ -584,7 +585,7 @@ export class PDFHighlightViewer implements IPDFHighlightViewer {
 
       // Render PDF canvas
       const canvas = await this.pdfEngine.renderPage(pageNumber, this.currentScale);
-      
+
       // Clear container and add canvas
       pageContainer.innerHTML = '';
       pageContainer.appendChild(canvas);
@@ -594,7 +595,7 @@ export class PDFHighlightViewer implements IPDFHighlightViewer {
 
       // Add text layer for selection (must be added before highlights)
       await this.addTextLayerToPage(pageNumber);
-      
+
       // Add simple highlight overlays
       await this.addHighlightsToPage(pageNumber, canvas.width, canvas.height);
 
@@ -602,10 +603,10 @@ export class PDFHighlightViewer implements IPDFHighlightViewer {
       pageContainer.classList.add('rendered');
       pageContainer.classList.remove('loading');
 
-      this.emit('renderComplete', { 
-        pageNumber, 
+      this.emit('renderComplete', {
+        pageNumber,
         renderTime: 0,
-        highlightCount: this.getHighlightCountForPage(pageNumber) 
+        highlightCount: this.getHighlightCountForPage(pageNumber)
       });
 
     } catch (error) {
@@ -629,6 +630,10 @@ export class PDFHighlightViewer implements IPDFHighlightViewer {
     if (this.container) {
       this.container.scrollTop = pagePosition;
     }
+  }
+
+  getZoom(): number {
+    return this.currentScale;
   }
 
   setZoom(scale: number): void {
@@ -672,14 +677,14 @@ export class PDFHighlightViewer implements IPDFHighlightViewer {
   enableTextSelection(): void {
     if (!this.options.enableTextSelection) {
       this.options.enableTextSelection = true;
-      
+
       // Add text layers to all currently rendered pages
       this.pageContainers.forEach(async (pageContainer, pageNumber) => {
         if (pageContainer.classList.contains('rendered')) {
           await this.addTextLayerToPage(pageNumber);
         }
       });
-      
+
       this.emit('textSelectionEnabled');
     }
   }
@@ -690,7 +695,7 @@ export class PDFHighlightViewer implements IPDFHighlightViewer {
   disableTextSelection(): void {
     if (this.options.enableTextSelection) {
       this.options.enableTextSelection = false;
-      
+
       // Remove text layers from all pages
       this.pageContainers.forEach((pageContainer) => {
         const textLayer = pageContainer.querySelector('.text-layer');
@@ -698,7 +703,7 @@ export class PDFHighlightViewer implements IPDFHighlightViewer {
           textLayer.remove();
         }
       });
-      
+
       this.emit('textSelectionDisabled');
     }
   }
@@ -730,10 +735,10 @@ export class PDFHighlightViewer implements IPDFHighlightViewer {
   loadHighlights(data: HighlightData): void {
     this.highlightData = data;
     this.updateAnalytics();
-    
+
     // Update unified layers for all rendered pages
     this.updateAllUnifiedLayers();
-    
+
     // Update spatial indices
     this.buildAllSpatialIndices();
 
@@ -743,49 +748,49 @@ export class PDFHighlightViewer implements IPDFHighlightViewer {
   addHighlight(pageNumber: number, highlight: TermOccurrence): void {
     // Add to first available category or create 'custom' category
     const categoryKey = Object.keys(this.highlightData)[0] || 'custom';
-    
+
     if (!this.highlightData[categoryKey]) {
       this.highlightData[categoryKey] = { pages: {}, terms: {} };
     }
-    
+
     if (!this.highlightData[categoryKey].pages[pageNumber.toString()]) {
       this.highlightData[categoryKey].pages[pageNumber.toString()] = [];
     }
-    
+
     this.highlightData[categoryKey].pages[pageNumber.toString()].push(highlight);
-    
+
     // Update page if rendered
     this.updatePageUnifiedLayer(pageNumber);
     this.buildSpatialIndexForPage(pageNumber);
-    
+
     this.updateAnalytics();
     this.emit('highlightAdded', { pageNumber, highlight });
   }
 
   removeHighlight(termId: string): void {
     let found = false;
-    
+
     // Remove from all categories
     Object.keys(this.highlightData).forEach(category => {
       Object.keys(this.highlightData[category].pages).forEach(pageNumber => {
         const page = this.highlightData[category].pages[pageNumber];
         const initialLength = page.length;
-        
+
         this.highlightData[category].pages[pageNumber] = page.filter(
           highlight => highlight.termId !== termId
         );
-        
+
         if (page.length !== initialLength) {
           found = true;
           this.updatePageUnifiedLayer(parseInt(pageNumber));
           this.buildSpatialIndexForPage(parseInt(pageNumber));
         }
       });
-      
+
       // Remove from terms
       delete this.highlightData[category].terms[termId];
     });
-    
+
     if (found) {
       this.updateAnalytics();
       this.emit('highlightRemoved', { termId });
@@ -799,14 +804,14 @@ export class PDFHighlightViewer implements IPDFHighlightViewer {
 
   getHighlightsForPage(pageNumber: number): TermOccurrence[] {
     const highlights: TermOccurrence[] = [];
-    
+
     Object.values(this.highlightData).forEach(categoryData => {
       const pageHighlights = categoryData.pages[pageNumber.toString()];
       if (pageHighlights) {
         highlights.push(...pageHighlights);
       }
     });
-    
+
     return highlights;
   }
 
@@ -835,7 +840,7 @@ export class PDFHighlightViewer implements IPDFHighlightViewer {
         if (existingHighlightLayer) {
           existingHighlightLayer.remove();
         }
-        
+
         // Re-add highlights to already rendered pages
         const canvas = pageContainer.querySelector('canvas');
         if (canvas) {
@@ -860,18 +865,18 @@ export class PDFHighlightViewer implements IPDFHighlightViewer {
     // Clear all containers and update their sizes for new scale
     let totalHeight = 0;
     let validDimensions = 0;
-    
+
     for (const [pageNumber, pageContainer] of this.pageContainers) {
       // Clear content
       pageContainer.innerHTML = '';
       pageContainer.classList.remove('rendered');
-      
+
       // Get new dimensions for the new scale
       try {
         const newDimensions = await this.getPageDimensions(pageNumber);
         pageContainer.style.height = `${newDimensions.height}px`;
         pageContainer.style.width = `${newDimensions.width}px`;
-        
+
         // Track for average calculation
         totalHeight += newDimensions.height;
         validDimensions++;
@@ -973,7 +978,7 @@ export class PDFHighlightViewer implements IPDFHighlightViewer {
         if (highlight && highlight.coordinates[occurrenceIndex]) {
           const page = parseInt(pageNumber);
           this.setPage(page);
-          
+
           // TODO: Scroll to specific coordinates within page
           this.emit('navigationComplete', { termId, pageNumber: page, occurrenceIndex });
           return;
@@ -1004,7 +1009,7 @@ export class PDFHighlightViewer implements IPDFHighlightViewer {
 
   searchTerms(query: string): TermMetadata[] {
     const results: TermMetadata[] = [];
-    
+
     Object.values(this.highlightData).forEach(categoryData => {
       Object.values(categoryData.terms).forEach(term => {
         if (term.term.toLowerCase().includes(query.toLowerCase()) ||
@@ -1013,7 +1018,7 @@ export class PDFHighlightViewer implements IPDFHighlightViewer {
         }
       });
     });
-    
+
     return results;
   }
 
@@ -1050,13 +1055,13 @@ export class PDFHighlightViewer implements IPDFHighlightViewer {
 
   getPerformanceMetrics(): PerformanceMetrics {
     const baseMetrics = this.performanceOptimizer.getPerformanceMetrics();
-    
+
     // Add memory usage info
     const renderedPages = Array.from(this.pageContainers.entries())
       .filter(([_, container]) => container.classList.contains('rendered')).length;
-    
+
     const memoryEstimate = renderedPages * 2; // ~2MB per rendered page
-    
+
     return {
       ...baseMetrics,
       memoryUsage: {
@@ -1079,7 +1084,7 @@ export class PDFHighlightViewer implements IPDFHighlightViewer {
   } {
     const renderedPages = Array.from(this.pageContainers.entries())
       .filter(([_, container]) => container.classList.contains('rendered')).length;
-    
+
     return {
       renderedPages,
       totalPages: this.totalPages,
@@ -1135,7 +1140,7 @@ export class PDFHighlightViewer implements IPDFHighlightViewer {
       announcement.style.left = '-10000px';
       announcement.textContent = `Highlighted term: ${termId}`;
       document.body.appendChild(announcement);
-      
+
       setTimeout(() => document.body.removeChild(announcement), 1000);
     }
   };
@@ -1177,7 +1182,7 @@ export class PDFHighlightViewer implements IPDFHighlightViewer {
     return new Promise((resolve, reject) => {
       const canvas = document.createElement('canvas');
       const ctx = canvas.getContext('2d');
-      
+
       if (!ctx || !this.pdfContainer) {
         reject(new Error('Canvas context not available'));
         return;
@@ -1255,46 +1260,66 @@ export class PDFHighlightViewer implements IPDFHighlightViewer {
 
         pageHighlights.forEach((highlight) => {
           if (highlight.coordinates && highlight.coordinates.length > 0) {
-            
+
             highlight.coordinates.forEach(coord => {
               const highlightDiv = document.createElement('div');
               highlightDiv.className = `highlight ${category}-highlight`;
               highlightDiv.setAttribute('data-term-id', highlight.termId);
-              
+              highlightDiv.setAttribute('data-category', category);
+
               // Scale coordinates by current zoom level
               const left = coord.x1 * scale;
               const top = coord.y1 * scale;
               const width = (coord.x2 - coord.x1) * scale;
               const height = (coord.y2 - coord.y1) * scale;
-              
+
               highlightDiv.style.position = 'absolute';
               highlightDiv.style.left = `${left}px`;
               highlightDiv.style.top = `${top}px`;
               highlightDiv.style.width = `${width}px`;
               highlightDiv.style.height = `${height}px`;
-              highlightDiv.style.backgroundColor = this.getCategoryColor(category);
-              highlightDiv.style.border = `1px solid ${this.getCategoryColor(category)}`;
+              highlightDiv.style.backgroundColor = this.getHighlightColor(highlight.termId, category);
+              highlightDiv.style.border = `1px solid ${this.getHighlightColor(highlight.termId, category)}`;
               highlightDiv.style.pointerEvents = 'auto';
               highlightDiv.style.cursor = 'pointer';
               highlightDiv.style.boxSizing = 'border-box';
               highlightDiv.style.userSelect = 'none'; // Prevent highlight div from being selected
               highlightDiv.style.mixBlendMode = 'multiply'; // Better color blending
-              
+
               // Check for overlapping highlights and adjust opacity
               const overlappingCount = this.countOverlappingHighlights(highlightLayer, coord, scale);
               const baseOpacity = Math.max(0.15, 0.3 / Math.max(1, overlappingCount * 0.7));
               highlightDiv.style.opacity = baseOpacity.toString();
 
-            // Add hover effect with dynamic opacity
-            const originalOpacity = baseOpacity.toString();
-            const hoverOpacity = Math.min(0.6, baseOpacity + 0.2).toString();
-            
-            highlightDiv.addEventListener('mouseenter', () => {
-              highlightDiv.style.opacity = hoverOpacity;
-            });
-            highlightDiv.addEventListener('mouseleave', () => {
-              highlightDiv.style.opacity = originalOpacity;
-            });
+              // todo make hover opacities configurable?
+              // Add hover effect with dynamic opacity
+              const originalOpacity = baseOpacity.toString();
+              const hoverOpacity = Math.min(0.6, baseOpacity + 0.2).toString();
+
+              highlightDiv.addEventListener('mouseenter', () => {
+                if (this.options.highlightsConfig?.enableMultilineHover) {
+                  const highlightBoxes = highlightLayer.querySelectorAll(`[data-term-id="${highlight.termId}"]`);
+                  highlightBoxes.forEach((highlightBox) => {
+                    (highlightBox as HTMLDivElement).style.opacity = hoverOpacity;
+                  });
+                  const unhoveredBoxes = highlightLayer.querySelectorAll(`div[data-term-id]:not([data-term-id="${highlight.termId}"])`);
+                  unhoveredBoxes.forEach((highlightBox) => {
+                    (highlightBox as HTMLDivElement).style.opacity = '0.1';
+                  });
+                } else {
+                  highlightDiv.style.opacity = hoverOpacity;
+                }
+              });
+              highlightDiv.addEventListener('mouseleave', () => {
+                if (this.options.highlightsConfig?.enableMultilineHover) {
+                  const allBoxes = highlightLayer.querySelectorAll(`div[data-term-id]`);
+                  allBoxes.forEach((highlightBox) => {
+                    (highlightBox as HTMLDivElement).style.opacity = originalOpacity;
+                  });
+                } else {
+                  highlightDiv.style.opacity = originalOpacity;
+                }
+              });
 
               highlightLayer.appendChild(highlightDiv);
             });
@@ -1311,6 +1336,59 @@ export class PDFHighlightViewer implements IPDFHighlightViewer {
     } catch (error) {
       console.error(`Failed to add highlights to page ${pageNumber}:`, error);
     }
+  }
+
+  /**
+   * Update highlights colors for specified page
+   * */
+  updateHighlightsStyles(pageNumber: number, hoveredIds?: string[]) {
+    const pageContainer = this.pageContainers.get(pageNumber);
+    if (!pageContainer) {
+      return;
+    }
+
+    const highlightLayer = pageContainer.querySelector('.highlight-layer') as HTMLDivElement;
+    if (!highlightLayer) {
+      return;
+    }
+
+    // Find all highlights in this page
+    const allHighlights = pageContainer.querySelectorAll('.highlight, .highlight-wrapper');
+    allHighlights.forEach((highlight) => {
+      const elementTermId = highlight.getAttribute('data-term-id');
+      const category = highlight.getAttribute('data-category');
+
+      if (elementTermId && category) {
+        (highlight as HTMLDivElement).style.backgroundColor = this.getHighlightColor(elementTermId, category);
+        (highlight as HTMLDivElement).style.border = `1px solid ${this.getHighlightColor(elementTermId, category)}`;
+
+        if (this.options.highlightsConfig?.enableMultilineHover && hoveredIds && Array.isArray(hoveredIds)) {
+          const baseOpacity = 0.3;
+          const originalOpacity = baseOpacity.toString();
+          const hoverOpacity = Math.min(0.6, baseOpacity + 0.2).toString();
+          const unhoveredOpacity = '0.1';
+
+          if (hoveredIds.includes(elementTermId)) {
+            (highlight as HTMLDivElement).style.opacity = hoverOpacity;
+          } else if (hoveredIds.length > 0) {
+            (highlight as HTMLDivElement).style.opacity = unhoveredOpacity;
+          } else {
+            (highlight as HTMLDivElement).style.opacity = originalOpacity;
+          }
+        }
+      }
+    });
+  }
+
+  /**
+   * Get highlight color
+   */
+  private getHighlightColor(termId: string, category: string): string {
+    if (this.options.highlightsConfig && this.options.highlightsConfig.getHighlightColor) {
+      return this.options.highlightsConfig.getHighlightColor(termId);
+    }
+
+    return this.getCategoryColor(category);
   }
 
   /**
@@ -1389,10 +1467,10 @@ export class PDFHighlightViewer implements IPDFHighlightViewer {
 
     // Add selected class to all instances of this term
     const termElements = this.container.querySelectorAll(`[data-term-id="${termId}"]`);
-    
+
     termElements.forEach((element) => {
       element.classList.add('selected-term');
-      
+
       // Override inline styles for selected term
       const htmlElement = element as HTMLElement;
       htmlElement.style.opacity = '0.75';
@@ -1406,13 +1484,13 @@ export class PDFHighlightViewer implements IPDFHighlightViewer {
 
     // Also dim all other highlights
     const allHighlights = this.container.querySelectorAll('.highlight, .highlight-wrapper');
-    
+
     allHighlights.forEach(element => {
       const elementTermId = element.getAttribute('data-term-id');
       if (!elementTermId || elementTermId !== termId) {
         element.classList.add('dimmed-highlight');
-        
-        // Override inline styles for dimmed highlights  
+
+        // Override inline styles for dimmed highlights
         const htmlElement = element as HTMLElement;
         htmlElement.style.opacity = '0.15';
         htmlElement.style.filter = 'brightness(0.6) contrast(0.7) saturate(0.4) grayscale(0.3)';
@@ -1433,7 +1511,7 @@ export class PDFHighlightViewer implements IPDFHighlightViewer {
     const selectedElements = this.container.querySelectorAll('.selected-term');
     selectedElements.forEach(element => {
       element.classList.remove('selected-term');
-      
+
       // Reset inline styles for selected elements
       const htmlElement = element as HTMLElement;
       htmlElement.style.filter = '';
@@ -1446,14 +1524,14 @@ export class PDFHighlightViewer implements IPDFHighlightViewer {
     const dimmedElements = this.container.querySelectorAll('.dimmed-highlight');
     dimmedElements.forEach(element => {
       element.classList.remove('dimmed-highlight');
-      
+
       // Reset inline styles for dimmed elements
       const htmlElement = element as HTMLElement;
       htmlElement.style.filter = '';
       htmlElement.style.transform = '';
       htmlElement.style.boxShadow = '';
       htmlElement.style.borderWidth = '';
-      
+
       // Restore original opacity from stored value
       const originalOpacity = htmlElement.dataset.originalOpacity;
       if (originalOpacity) {
@@ -1486,10 +1564,10 @@ export class PDFHighlightViewer implements IPDFHighlightViewer {
       // Get the PDF page and its viewport
       const pdfPage = await this.pdfEngine.getPage(pageNumber);
       const viewport = pdfPage.getViewport({ scale: this.currentScale });
-      
+
       // Extract text content from PDF
       const textContent = await pdfPage.getTextContent();
-      
+
       // Create text layer container
       const textLayer = document.createElement('div');
       textLayer.className = 'text-layer';
@@ -1502,11 +1580,11 @@ export class PDFHighlightViewer implements IPDFHighlightViewer {
       textLayer.style.lineHeight = '1';
       textLayer.style.zIndex = '1'; // Below highlights but above canvas
       // textLayer.style.opacity = '0.1'; // Uncomment for debugging text boundaries
-      
+
       // Process text items with proper PDF coordinate transformation
       textContent.items.forEach((item: any) => {
         if (!item.str || !item.str.trim()) return; // Skip empty text
-        
+
         const textSpan = document.createElement('span');
         textSpan.textContent = item.str;
         textSpan.style.position = 'absolute';
@@ -1517,22 +1595,22 @@ export class PDFHighlightViewer implements IPDFHighlightViewer {
         textSpan.style.userSelect = 'text';
         textSpan.style.whiteSpace = 'pre';
         textSpan.style.pointerEvents = 'auto';
-        
+
         // Use PDF.js transform matrix directly for accurate positioning
         const transform = item.transform;
-        
+
         // Extract position and scaling from transform matrix
         const scaleX = transform[0];
         const scaleY = transform[3];
         const translateX = transform[4];
         const translateY = transform[5];
-        
+
         // Apply viewport transformation to get screen coordinates
         const [screenX, screenY] = viewport.convertToViewportPoint(translateX, translateY);
-        
+
         // Calculate font size with proper viewport scaling
         const fontSize = Math.abs(scaleY) * this.currentScale;
-        
+
         // Calculate text width with proper viewport scaling
         let textWidth = 0;
         if (item.width) {
@@ -1551,7 +1629,7 @@ export class PDFHighlightViewer implements IPDFHighlightViewer {
             textWidth = fontSize * item.str.length * 0.6;
           }
         }
-        
+
         // Apply horizontal scaling from transform matrix
         const horizontalScale = Math.abs(scaleX);
         const verticalScale = Math.abs(scaleY);
@@ -1559,7 +1637,7 @@ export class PDFHighlightViewer implements IPDFHighlightViewer {
           const scaleRatio = horizontalScale / verticalScale;
           textWidth = textWidth * scaleRatio;
         }
-        
+
         // Set position and dimensions using screen coordinates
         textSpan.style.left = `${screenX}px`;
         textSpan.style.top = `${screenY - fontSize}px`; // Adjust for text baseline
@@ -1572,30 +1650,30 @@ export class PDFHighlightViewer implements IPDFHighlightViewer {
         textSpan.style.whiteSpace = 'nowrap'; // Prevent text wrapping
         textSpan.style.letterSpacing = '0px'; // Remove any letter spacing interference
         textSpan.style.wordSpacing = '0px'; // Remove word spacing interference
-        
+
         // Add data attributes for debugging
         textSpan.setAttribute('data-text', item.str);
         textSpan.setAttribute('data-width', textWidth.toString());
         textSpan.setAttribute('data-original-width', item.width?.toString() || 'unknown');
-        
+
         // Handle horizontal scaling if different from vertical
         if (Math.abs(horizontalScale - verticalScale) > 0.1) {
           const scaleRatio = horizontalScale / verticalScale;
           textSpan.style.transform = `scaleX(${scaleRatio})`;
           textSpan.style.transformOrigin = '0 0';
         }
-        
+
         // Handle rotation if present in transform
         if (Math.abs(transform[1]) > 0.01 || Math.abs(transform[2]) > 0.01) {
           const angle = Math.atan2(transform[1], transform[0]) * 180 / Math.PI;
           textSpan.style.transform = `rotate(${angle}deg)`;
         }
-        
+
         textLayer.appendChild(textSpan);
       });
 
       pageContainer.appendChild(textLayer);
-      
+
       console.log(`Text layer added to page ${pageNumber} with ${textContent.items.length} text items`);
       console.log('Text span style applied:', textLayer.children[0]?.getAttribute('style'));
     } catch (error) {
@@ -1611,34 +1689,34 @@ export class PDFHighlightViewer implements IPDFHighlightViewer {
     const targetTop = coord.y1 * scale;
     const targetWidth = (coord.x2 - coord.x1) * scale;
     const targetHeight = (coord.y2 - coord.y1) * scale;
-    
+
     const existingHighlights = highlightLayer.children;
     let overlappingCount = 0;
-    
+
     for (let i = 0; i < existingHighlights.length; i++) {
       const existing = existingHighlights[i] as HTMLElement;
       const existingLeft = parseFloat(existing.style.left);
       const existingTop = parseFloat(existing.style.top);
       const existingWidth = parseFloat(existing.style.width);
       const existingHeight = parseFloat(existing.style.height);
-      
+
       // Check if highlights overlap significantly (>80% overlap)
       const overlapLeft = Math.max(targetLeft, existingLeft);
       const overlapTop = Math.max(targetTop, existingTop);
       const overlapRight = Math.min(targetLeft + targetWidth, existingLeft + existingWidth);
       const overlapBottom = Math.min(targetTop + targetHeight, existingTop + existingHeight);
-      
+
       if (overlapRight > overlapLeft && overlapBottom > overlapTop) {
         const overlapArea = (overlapRight - overlapLeft) * (overlapBottom - overlapTop);
         const targetArea = targetWidth * targetHeight;
         const overlapPercentage = overlapArea / targetArea;
-        
+
         if (overlapPercentage > 0.8) {
           overlappingCount++;
         }
       }
     }
-    
+
     return overlappingCount;
   }
 
@@ -1647,7 +1725,7 @@ export class PDFHighlightViewer implements IPDFHighlightViewer {
    */
   private applySelectionToPage(pageNumber: number): void {
     if (!this.selectedTermId) return;
-    
+
     const pageContainer = this.pageContainers.get(pageNumber);
     if (!pageContainer) return;
 
@@ -1664,7 +1742,7 @@ export class PDFHighlightViewer implements IPDFHighlightViewer {
         // Apply selected styling to matching terms
         element.classList.add('selected-term');
         element.classList.remove('dimmed-highlight');
-        
+
         htmlElement.style.opacity = '0.75';
         htmlElement.style.filter = 'brightness(1.05) contrast(1.05) saturate(1.1)';
         htmlElement.style.boxShadow = '0 0 0 1px rgba(255, 255, 255, 0.6), 0 0 4px rgba(102, 126, 234, 0.3)';
@@ -1676,12 +1754,12 @@ export class PDFHighlightViewer implements IPDFHighlightViewer {
         // Apply dimmed styling to non-selected highlights
         element.classList.add('dimmed-highlight');
         element.classList.remove('selected-term');
-        
+
         // Store original opacity to restore later
         if (!htmlElement.dataset.originalOpacity) {
           htmlElement.dataset.originalOpacity = htmlElement.style.opacity || '0.3';
         }
-        
+
         htmlElement.style.opacity = '0.15';
         htmlElement.style.filter = 'brightness(0.6) contrast(0.7) saturate(0.4) grayscale(0.3)';
         htmlElement.style.transform = '';
