@@ -1,0 +1,27 @@
+# Dependencies
+node_modules
+package-lock.json
+
+# Build outputs
+dist
+build
+coverage
+
+# Example build
+example/dist
+example/node_modules
+
+# Logs
+*.log
+npm-debug.log*
+
+# IDE
+.vscode
+.idea
+
+# Misc
+.DS_Store
+*.map
+
+# Generated files
+*.d.ts
