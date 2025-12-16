@@ -1,10 +1,4 @@
-import {
-  TextContent,
-  TextItem,
-  BoundingBox,
-  Segment,
-  HighlightData,
-} from '../types';
+import { TextContent, TextItem, BoundingBox, Segment, HighlightData } from '../types';
 
 export interface SegmentationPoint {
   globalIndex: number;

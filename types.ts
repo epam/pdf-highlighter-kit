@@ -59,10 +59,13 @@ export interface TermMetadata {
   }[];
 }
 
-export type HighlightData = Record<string, {
+export type HighlightData = Record<
+  string,
+  {
     pages: Record<string, TermOccurrence[]>;
     terms: Record<string, TermMetadata>;
-  }>;
+  }
+>;
 
 export interface TextContent {
   items: TextItem[];

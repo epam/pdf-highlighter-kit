@@ -170,8 +170,7 @@ export class UnifiedLayerBuilder {
     highlights: HighlightData,
     pageNumber: number
   ): { termId: string; category: string; coordinates: BoundingBox }[] {
-    const itemHighlights: { termId: string; category: string; coordinates: BoundingBox }[] =
-      [];
+    const itemHighlights: { termId: string; category: string; coordinates: BoundingBox }[] = [];
 
     Object.entries(highlights).forEach(([category, categoryData]) => {
       const pageHighlights = categoryData.pages[pageNumber.toString()];

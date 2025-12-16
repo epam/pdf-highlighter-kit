@@ -621,7 +621,9 @@ export class PDFHighlightViewer implements IPDFHighlightViewer {
   }
 
   preloadPages(pageNumbers: number[]): Promise<void> {
-    return Promise.all(pageNumbers.map((pageNumber) => this.renderPage(pageNumber))).then(() => {return;});
+    return Promise.all(pageNumbers.map((pageNumber) => this.renderPage(pageNumber))).then(() => {
+      return;
+    });
   }
 
   setPage(pageNumber: number): void {
