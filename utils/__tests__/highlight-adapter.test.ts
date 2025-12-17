@@ -4,8 +4,8 @@ import {
   extractCategoryStyles,
   validateInputData,
   mergeHighlightData,
-} from './highlight-adapter';
-import type { InputHighlightData, HighlightData } from '../types';
+} from '../highlight-adapter';
+import type { InputHighlightData, HighlightData } from '../../types';
 
 describe('Highlight Adapter', () => {
   describe('adaptHighlightData', () => {
