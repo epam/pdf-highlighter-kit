@@ -8,6 +8,9 @@ export type { PDFHighlightViewer as IPDFHighlightViewer } from './api';
 export type {
   ViewerOptions,
   HighlightData,
+  InputHighlightData,
+  BBox,
+  HighlightStyle,
   TermOccurrence,
   TermMetadata,
   CategoryStyle,
@@ -70,6 +73,14 @@ export {
   processBase64InChunks,
 } from './utils/pdf-utils';
 export type { PDFSourceType } from './utils/pdf-utils';
+
+export {
+  adaptHighlightData,
+  extractCategoryStyles,
+  validateInputData,
+  mergeHighlightData,
+} from './utils/highlight-adapter';
+export type { AdapterOptions } from './utils/highlight-adapter';
 
 export { configurePDFViewer, getConfig, resetConfig } from './config';
 export type { PDFViewerConfig } from './config';

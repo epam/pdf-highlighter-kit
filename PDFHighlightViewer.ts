@@ -11,6 +11,7 @@ import {
   AccessibilityFeatures,
   InteractionMode,
   TermMetadata,
+  InputHighlightData,
 } from './types';
 import { PDFEngine } from './core/pdf-engine';
 import { ViewportManager } from './core/viewport-manager';
@@ -18,6 +19,7 @@ import { UnifiedLayerBuilder } from './core/unified-layer-builder';
 import { UnifiedInteractionHandler, InteractionCallbacks } from './core/interaction-handler';
 import { PerformanceOptimizer } from './core/performance-optimizer';
 import { CategoryStyleManager } from './core/style-manager';
+import { adaptHighlightData } from './utils/highlight-adapter';
 
 export class PDFHighlightViewer implements IPDFHighlightViewer {
   private pdfEngine: PDFEngine;
@@ -42,7 +44,7 @@ export class PDFHighlightViewer implements IPDFHighlightViewer {
   private pageDimensions = new Map<number, { width: number; height: number }>();
   private defaultPageHeight = 800;
 
-  private eventListeners: Array<{ event: string; callback: (...args: any[]) => void }> = [];
+  private eventListeners: { event: string; callback: (...args: any[]) => void }[] = [];
   private scrollListener: (() => void) | null = null;
   private analytics: HighlightAnalytics = {
     totalHighlights: 0,
@@ -734,8 +736,16 @@ export class PDFHighlightViewer implements IPDFHighlightViewer {
   // Highlight Management
   // =============================================================================
 
-  loadHighlights(data: HighlightData): void {
-    this.highlightData = data;
+  loadHighlights(data: HighlightData | InputHighlightData[]): void {
+    if (Array.isArray(data)) {
+      this.highlightData = adaptHighlightData(data, {
+        categoryResolver: (highlight) => highlight.metadata?.category || 'default',
+        termNameResolver: (highlight) => highlight.metadata?.term || highlight.id,
+      });
+    } else {
+      this.highlightData = data;
+    }
+
     this.updateAnalytics();
 
     // Update unified layers for all rendered pages
@@ -744,7 +754,7 @@ export class PDFHighlightViewer implements IPDFHighlightViewer {
     // Update spatial indices
     this.buildAllSpatialIndices();
 
-    this.emit('highlightsLoaded', { data });
+    this.emit('highlightsLoaded', { data: this.highlightData });
   }
 
   addHighlight(pageNumber: number, highlight: TermOccurrence): void {
@@ -973,7 +983,7 @@ export class PDFHighlightViewer implements IPDFHighlightViewer {
   // Navigation
   // =============================================================================
 
-  goToHighlight(termId: string, occurrenceIndex: number = 0): void {
+  goToHighlight(termId: string, occurrenceIndex = 0): void {
     // Find highlight location
     for (const [, categoryData] of Object.entries(this.highlightData)) {
       for (const [pageNumber, highlights] of Object.entries(categoryData.pages)) {
@@ -1185,7 +1195,7 @@ export class PDFHighlightViewer implements IPDFHighlightViewer {
   // Utility Methods
   // =============================================================================
 
-  exportAsImage(format: 'png' | 'jpeg' = 'png', quality: number = 0.9): Promise<Blob> {
+  exportAsImage(format: 'png' | 'jpeg' = 'png', quality = 0.9): Promise<Blob> {
     return new Promise((resolve, reject) => {
       const canvas = document.createElement('canvas');
       const ctx = canvas.getContext('2d');

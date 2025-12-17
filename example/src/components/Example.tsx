@@ -1,21 +1,29 @@
 import React, { useEffect, useRef, useState, useMemo } from 'react';
 import './Example.css';
-import {
+
+import type {
   HighlightData,
+  InputHighlightData,
   PerformanceMetrics,
   HighlightHoverEvent,
   HighlightClickEvent,
   TextSelectionEvent,
-  PDFHighlightViewer,
-} from '../../..';
+} from '../../../types';
 
-import kriegerData from '../../demo.json';
+import { PDFHighlightViewer } from '../../../PDFHighlightViewer';
+
+import kriegerDataOld from '../../demo.json';
+import kriegerDataNew from '../../demo-new-format.json';
 
 interface KriegerPDFDemoProps {
   className?: string;
+  useNewFormat?: boolean;
 }
 
-export const KriegerPDFDemo: React.FC<KriegerPDFDemoProps> = ({ className = '' }) => {
+export const KriegerPDFDemo: React.FC<KriegerPDFDemoProps> = ({
+  className = '',
+  useNewFormat = true,
+}) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const viewerRef = useRef<PDFHighlightViewer | null>(null);
 
@@ -29,10 +37,8 @@ export const KriegerPDFDemo: React.FC<KriegerPDFDemoProps> = ({ className = '' }
   const [error, setError] = useState<string | null>(null);
   const [visibleCategories, setVisibleCategories] = useState<Set<string>>(new Set());
   const [isTextSelectionEnabled, setIsTextSelectionEnabled] = useState(true);
+  const [dataFormat, setDataFormat] = useState<'old' | 'new'>(useNewFormat ? 'new' : 'old');
 
-  const [hoveredData, setHoveredData] = useState<any>(null);
-  const [clickedData, setClickedData] = useState<any>(null);
-  const [selectedText, setSelectedText] = useState<any>(null);
   const [metrics, setMetrics] = useState<PerformanceMetrics | null>(null);
   const [currentData, setCurrentData] = useState<any>(null);
 
@@ -48,64 +54,106 @@ export const KriegerPDFDemo: React.FC<KriegerPDFDemoProps> = ({ className = '' }
     []
   );
 
-  const highlightData = useMemo((): HighlightData => {
-    const processedData: HighlightData = {};
-    const categories = ['protein', 'species', 'chemical', 'disease', 'gene', 'cell_line'];
+  const highlightData = useMemo((): HighlightData | InputHighlightData[] => {
+    if (dataFormat === 'new') {
+      const demoData = kriegerDataNew as any;
+      return demoData.highlights as InputHighlightData[];
+    } else {
+      const processedData: HighlightData = {};
+      const categories = ['protein', 'species', 'chemical', 'disease', 'gene', 'cell_line'];
 
-    categories.forEach((category) => {
-      if (kriegerData[category as keyof typeof kriegerData]) {
-        const categoryData = kriegerData[category as keyof typeof kriegerData] as any;
-        processedData[category] = {
-          pages: categoryData.pages || {},
-          terms: categoryData.terms || {},
-        };
-      }
-    });
+      categories.forEach((category) => {
+        const categoryKey = category as keyof typeof kriegerDataOld;
+        if (kriegerDataOld[categoryKey]) {
+          const categoryData = kriegerDataOld[categoryKey] as any;
+          processedData[category] = {
+            pages: categoryData.pages || {},
+            terms: categoryData.terms || {},
+          };
+        }
+      });
 
-    return processedData;
-  }, []);
+      return processedData;
+    }
+  }, [dataFormat]);
 
   const stats = useMemo(() => {
-    let totalHighlights = 0;
-    let totalTerms = 0;
-    const categoryCounts: { [key: string]: number } = {};
+    if (dataFormat === 'new') {
+      const demoData = kriegerDataNew as any;
+      const highlights = demoData.highlights as InputHighlightData[];
+      const categoryCounts: { [key: string]: number } = {};
 
-    Object.entries(highlightData).forEach(([category, categoryData]) => {
-      let categoryHighlightCount = 0;
-      Object.values(categoryData.pages).forEach((pageHighlights) => {
-        categoryHighlightCount += pageHighlights.length;
+      highlights.forEach((h: InputHighlightData) => {
+        const category = h.metadata?.category || 'default';
+        categoryCounts[category] = (categoryCounts[category] || 0) + h.bboxes.length;
       });
-      totalTerms += Object.keys(categoryData.terms).length;
-      categoryCounts[category] = categoryHighlightCount;
-      totalHighlights += categoryHighlightCount;
-    });
 
-    return { totalHighlights, categoryCounts, totalTerms };
-  }, [highlightData]);
+      return {
+        totalHighlights: highlights.reduce(
+          (sum: number, h: InputHighlightData) => sum + h.bboxes.length,
+          0
+        ),
+        categoryCounts,
+        totalTerms: highlights.length,
+      };
+    } else {
+      let totalHighlights = 0;
+      let totalTerms = 0;
+      const categoryCounts: { [key: string]: number } = {};
+
+      Object.entries(highlightData as HighlightData).forEach(([category, categoryData]) => {
+        let categoryHighlightCount = 0;
+        Object.values(categoryData.pages).forEach((pageHighlights) => {
+          categoryHighlightCount += pageHighlights.length;
+        });
+        totalTerms += Object.keys(categoryData.terms).length;
+        categoryCounts[category] = categoryHighlightCount;
+        totalHighlights += categoryHighlightCount;
+      });
+
+      return { totalHighlights, categoryCounts, totalTerms };
+    }
+  }, [highlightData, dataFormat]);
 
   useEffect(() => {
-    setVisibleCategories(new Set(Object.keys(highlightData)));
-  }, [highlightData]);
+    setVisibleCategories(new Set(Object.keys(stats.categoryCounts)));
+  }, [stats.categoryCounts]);
 
-  const filteredHighlightData = useMemo((): HighlightData => {
-    const filtered: HighlightData = {};
-    Object.entries(highlightData).forEach(([category, categoryData]) => {
-      if (visibleCategories.has(category)) {
-        filtered[category] = categoryData;
-      }
-    });
-    return filtered;
-  }, [highlightData, visibleCategories]);
+  const filteredHighlightData = useMemo((): HighlightData | InputHighlightData[] => {
+    if (dataFormat === 'new') {
+      const highlights = highlightData as InputHighlightData[];
+      return highlights.filter((h: InputHighlightData) => {
+        const category = h.metadata?.category || 'default';
+        return visibleCategories.has(category);
+      });
+    } else {
+      const filtered: HighlightData = {};
+      Object.entries(highlightData as HighlightData).forEach(([category, categoryData]) => {
+        if (visibleCategories.has(category)) {
+          filtered[category] = categoryData;
+        }
+      });
+      return filtered;
+    }
+  }, [highlightData, visibleCategories, dataFormat]);
 
+  // Main initialization effect - runs when dataFormat or isTextSelectionEnabled changes
   useEffect(() => {
-    if (!containerRef.current || viewerRef.current) return;
+    if (!containerRef.current) return;
 
     let viewer: PDFHighlightViewer | null = null;
-    let metricsInterval: ReturnType<typeof setInterval> | null = null;
     let mounted = true;
 
     const initViewer = async () => {
+      // Cleanup previous viewer if exists
+      if (viewerRef.current) {
+        viewerRef.current.destroy();
+        viewerRef.current = null;
+      }
+
       setIsInitializing(true);
+      setIsLoaded(false);
+      setShowLoading(true);
       setError(null);
 
       try {
@@ -113,55 +161,47 @@ export const KriegerPDFDemo: React.FC<KriegerPDFDemoProps> = ({ className = '' }
 
         viewer = new PDFHighlightViewer();
 
-        viewer.addEventListener('pdfLoaded', ({ totalPages }) => {
+        viewer.addEventListener('pdfLoaded', ({ totalPages }: any) => {
           setTotalPages(totalPages);
           setShowLoading(false);
           setTimeout(() => setIsLoaded(true), 100);
         });
 
-        viewer.addEventListener('pageChanged', ({ currentPage }) => {
+        viewer.addEventListener('pageChanged', ({ currentPage }: any) => {
           setCurrentPage(currentPage);
         });
 
-        viewer.addEventListener('zoomChanged', ({ scale }) => {
+        viewer.addEventListener('zoomChanged', ({ scale }: any) => {
           setZoom(scale);
         });
 
         viewer.addEventListener('textSelected', (event: TextSelectionEvent) => {
-          const data = {
+          setCurrentData({
             event: 'textSelected',
             text: event.text,
             highlights: event.highlights,
-          };
-          setCurrentData(data);
+          });
         });
 
         viewer.addEventListener('highlightHover', (event: HighlightHoverEvent) => {
-          const termData = findTermById(event.termId);
-          const hoverData = {
+          setCurrentData({
             event: 'highlightHover',
             termId: event.termId,
-            term: termData?.term,
             category: event.category,
-            termDetails: termData,
-          };
-          setCurrentData(hoverData);
+            format: dataFormat,
+          });
         });
 
         viewer.addEventListener('highlightClick', (event: HighlightClickEvent) => {
-          const termData = findTermById(event.termId);
-          const clickData = {
+          setCurrentData({
             event: 'highlightClick',
             termId: event.termId,
-            term: termData?.term,
             category: event.category,
-            termDetails: termData,
-            allOccurrences: getTermOccurrences(event.termId),
-          };
-          setCurrentData(clickData);
+            format: dataFormat,
+          });
         });
 
-        viewer.addEventListener('error', ({ error }) => {
+        viewer.addEventListener('error', ({ error }: any) => {
           setError(error.message);
         });
 
@@ -179,8 +219,16 @@ export const KriegerPDFDemo: React.FC<KriegerPDFDemoProps> = ({ className = '' }
           accessibility: true,
         });
 
-        await viewer.loadPDF((kriegerData as any).pdf.data);
+        const pdfData =
+          dataFormat === 'new'
+            ? (kriegerDataNew as any).pdf?.data
+            : (kriegerDataOld as any).pdf?.data;
 
+        if (!pdfData) {
+          throw new Error('PDF data not found in the demo file');
+        }
+
+        await viewer.loadPDF(pdfData);
         viewer.loadHighlights(filteredHighlightData);
 
         if (mounted) {
@@ -201,61 +249,27 @@ export const KriegerPDFDemo: React.FC<KriegerPDFDemoProps> = ({ className = '' }
 
     return () => {
       mounted = false;
-
-      if (metricsInterval) {
-        clearInterval(metricsInterval);
-      }
-
       if (viewer) {
         viewer.destroy();
       }
-
       if (viewerRef.current) {
         viewerRef.current.destroy();
         viewerRef.current = null;
       }
     };
-  }, []);
-
-  useEffect(() => {
-    if (viewerRef.current && isLoaded) {
-      viewerRef.current.loadHighlights(filteredHighlightData);
-    }
-  }, [filteredHighlightData, isLoaded]);
+  }, [dataFormat, isTextSelectionEnabled, filteredHighlightData]);
 
   useEffect(() => {
     setZoomInput(Math.round(zoom * 100).toString());
   }, [zoom]);
 
-  const findTermById = (termId: string) => {
-    for (const categoryData of Object.values(highlightData)) {
-      if (categoryData.terms[termId]) {
-        return categoryData.terms[termId];
-      }
-    }
-    return null;
-  };
-
-  const getTermOccurrences = (termId: string) => {
-    const occurrences = [];
-    for (const [category, categoryData] of Object.entries(highlightData)) {
-      for (const [pageNum, pageHighlights] of Object.entries(categoryData.pages)) {
-        const pageOccurrences = pageHighlights.filter((h) => h.termId === termId);
-        if (pageOccurrences.length > 0) {
-          occurrences.push({
-            page: parseInt(pageNum),
-            count: pageOccurrences.length,
-            category,
-            highlights: pageOccurrences,
-          });
-        }
-      }
-    }
-    return occurrences;
+  const handleToggleFormat = () => {
+    setDataFormat((prev) => (prev === 'old' ? 'new' : 'old'));
   };
 
   const handleZoomIn = () => viewerRef.current?.setZoom(zoom + 0.25);
   const handleZoomOut = () => viewerRef.current?.setZoom(zoom - 0.25);
+
   const handleZoomInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value;
     if (value === '' || /^\d+$/.test(value)) {
@@ -265,18 +279,14 @@ export const KriegerPDFDemo: React.FC<KriegerPDFDemoProps> = ({ className = '' }
 
   const handleZoomInputBlur = () => {
     const numValue = parseInt(zoomInput, 10);
-
     if (isNaN(numValue) || numValue < 50) {
-      const newZoom = 0.5;
-      viewerRef.current?.setZoom(newZoom);
+      viewerRef.current?.setZoom(0.5);
       setZoomInput('50');
     } else if (numValue > 400) {
-      const newZoom = 4.0;
-      viewerRef.current?.setZoom(newZoom);
+      viewerRef.current?.setZoom(4.0);
       setZoomInput('400');
     } else {
-      const newZoom = numValue / 100;
-      viewerRef.current?.setZoom(newZoom);
+      viewerRef.current?.setZoom(numValue / 100);
       setZoomInput(numValue.toString());
     }
   };
@@ -291,6 +301,7 @@ export const KriegerPDFDemo: React.FC<KriegerPDFDemoProps> = ({ className = '' }
   };
 
   const handlePageChange = (page: number) => viewerRef.current?.setPage(page);
+
   const handleCategoryToggle = (category: string) => {
     setVisibleCategories((prev) => {
       const newSet = new Set(prev);
@@ -302,6 +313,7 @@ export const KriegerPDFDemo: React.FC<KriegerPDFDemoProps> = ({ className = '' }
       return newSet;
     });
   };
+
   const handleToggleTextSelection = () => {
     if (viewerRef.current) {
       const newState = viewerRef.current.toggleTextSelection();
@@ -327,7 +339,6 @@ export const KriegerPDFDemo: React.FC<KriegerPDFDemoProps> = ({ className = '' }
             aria-label="Zoom percentage"
           />
           <span className="zoom-unit">%</span>
-
           <button onClick={handleZoomIn} disabled={zoom >= 4}>
             +
           </button>
@@ -354,6 +365,12 @@ export const KriegerPDFDemo: React.FC<KriegerPDFDemoProps> = ({ className = '' }
             className={isTextSelectionEnabled ? 'active' : ''}
           >
             Text Select: {isTextSelectionEnabled ? 'ON' : 'OFF'}
+          </button>
+        </div>
+
+        <div className="controls-group">
+          <button onClick={handleToggleFormat} className={dataFormat === 'new' ? 'active' : ''}>
+            Format: {dataFormat.toUpperCase()}
           </button>
         </div>
 
@@ -388,7 +405,7 @@ export const KriegerPDFDemo: React.FC<KriegerPDFDemoProps> = ({ className = '' }
             {showLoading && (
               <div className="pdf-loading-state">
                 <div className="loading-indicator">
-                  Loading PDF... ({stats.totalHighlights} highlights)
+                  Loading PDF... ({stats.totalHighlights} highlights, {dataFormat} format)
                 </div>
               </div>
             )}
@@ -400,13 +417,9 @@ export const KriegerPDFDemo: React.FC<KriegerPDFDemoProps> = ({ className = '' }
             {JSON.stringify(
               currentData || {
                 status: 'Ready',
+                format: dataFormat,
                 stats,
-                pdf: {
-                  pages: totalPages,
-                  currentPage,
-                  zoom,
-                  dataSize: `${Math.round((kriegerData as any).pdf.data.length / 1024)}KB`,
-                },
+                pdf: { pages: totalPages, currentPage, zoom },
                 metrics: metrics || null,
               },
               null,

@@ -1,5 +1,30 @@
 export type Priority = 'high' | 'medium' | 'low' | 'idle';
 
+export interface BBox {
+  x1: number;
+  y1: number;
+  x2: number;
+  y2: number;
+  page: number;
+}
+
+export interface HighlightStyle {
+  backgroundColor: string;
+  borderColor?: string;
+  borderWidth?: string;
+  opacity?: number;
+  hoverOpacity?: number;
+  pulseAnimation?: boolean;
+}
+
+export interface InputHighlightData {
+  id: string;
+  bboxes: BBox[];
+  style?: HighlightStyle;
+  tooltipText?: string;
+  metadata?: Record<string, any>;
+}
+
 export interface RenderingQueue {
   high: Page[];
   medium: Page[];

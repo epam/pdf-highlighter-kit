@@ -10,6 +10,7 @@ coverage
 # Example build
 example/dist
 example/node_modules
+example/demo-new-format.json
 
 # Logs
 *.log

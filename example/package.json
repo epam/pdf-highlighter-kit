@@ -1,26 +1,14 @@
 {
-  "name": "pdf-highlight-viewer",
+  "name": "pdf-highlighter-kit-example",
   "version": "0.0.1",
-  "description": "High-performance PDF viewer with intelligent highlighting and text selection capabilities",
+  "private": true,
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vite build",
-    "preview": "vite preview"
+    "build": "tsc && vite build",
+    "preview": "vite preview",
+    "convert:demo": "node scripts/convert-demo.js"
   },
-  "keywords": [
-    "pdf",
-    "viewer",
-    "highlight",
-    "annotation",
-    "text-selection",
-    "ner",
-    "named-entity-recognition",
-    "performance",
-    "typescript"
-  ],
-  "author": "Podruzhinskii Stanislav",
-  "license": "MIT",
   "dependencies": {
     "react": "^19.2.3",
     "react-dom": "^19.2.3",
@@ -29,8 +17,8 @@
   "devDependencies": {
     "@types/react": "^19.2.7",
     "@types/react-dom": "^19.2.3",
-    "@vitejs/plugin-react": "^5.1.2",
+    "@vitejs/plugin-react": "^4.0.0",
     "typescript": "^5.0.0",
-    "vite": "^7.3.0"
+    "vite": "^5.0.0"
   }
 }
