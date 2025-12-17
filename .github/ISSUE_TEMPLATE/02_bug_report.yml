@@ -1,0 +1,58 @@
+---
+name: 🐛 Bug report
+description: Problems and issues with code in EPAM PDF Highlighter Kit
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: "
+        <img src='https://www.gravatar.com/avatar/2937817a82464ae07b138d8b57a7ccd4?s=40' align='left' width='40' height='40' style='margin-right:10px'>
+        Thank you for finding the time to report the problem!
+
+        We really appreciate the community's efforts to improve EPAM PDF Highlighter Kit.
+        <br clear='left'/>"
+  - type: input
+    validations:
+      required: true
+    attributes:
+      label: EPAM PDF Highlighter Kit version
+      description: >
+        On what version of EPAM PDF Highlighter Kit are you currently experiencing the issue? Please check your package.json or npm list.
+      placeholder: 1.0.0
+  - type: textarea
+    attributes:
+      label: How to reproduce
+      description: >
+        What should we do to reproduce the problem? If you are not able to provide a reproducible case,
+        please open a [discussion](https://github.com/epam/pdf-highlighter-kit/discussions) instead.
+      placeholder: >
+        Please make sure you provide a reproducible step-by-step case of how to reproduce the problem as minimally and precisely as possible.
+        Remember that non-reproducible issues will be closed! Opening a discussion is recommended as a first step.
+    validations:
+      required: true
+  - type: textarea
+    attributes:
+      label: Actual result
+      description: What do you think went wrong?
+      placeholder: >
+        Please explain why you think the behavior is erroneous. It is extremely helpful if you copy&paste the fragment of logs showing the exact error messages or wrong behavior and screenshots for UI problems. You can include files by dragging and dropping them here.
+    validations:
+      required: true
+  - type: textarea
+    attributes:
+      label: Expected result
+      description: What you think should happen instead?
+      placeholder: >
+        Please provide any suggestions or ideas what should happen instead.
+    validations:
+      required: true
+  - type: checkboxes
+    attributes:
+      label: Confidential information
+      options:
+        - label: >
+            I confirm that do not share any confidential information
+          required: true
+  - type: markdown
+    attributes:
+      value: "Thanks for completing our form!"
