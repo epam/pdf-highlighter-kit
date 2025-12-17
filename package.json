@@ -1,6 +1,6 @@
 {
   "name": "@epam/pdf-highlighter-kit",
-  "version": "0.0.0",
+  "version": "0.0.1",
   "description": "High-performance PDF viewer with intelligent highlighting and text selection capabilities",
   "main": "dist/index.js",
   "module": "dist/index.esm.js",
