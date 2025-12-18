@@ -208,7 +208,7 @@ function PDFViewer({ pdfUrl, highlights }) {
 
 ## License
 
-MIT
+Apache-2.0
 
 ## Contributing
 
