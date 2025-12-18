@@ -10,9 +10,10 @@
     "convert:demo": "node scripts/convert-demo.js"
   },
   "dependencies": {
+    "@epam/pdf-highlighter-kit": "0.0.2",
+    "pdfjs-dist": "^5.4.149",
     "react": "^19.2.3",
-    "react-dom": "^19.2.3",
-    "pdfjs-dist": "^5.4.149"
+    "react-dom": "^19.2.3"
   },
   "devDependencies": {
     "@types/react": "^19.2.7",

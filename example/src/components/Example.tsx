@@ -8,9 +8,9 @@ import type {
   HighlightHoverEvent,
   HighlightClickEvent,
   TextSelectionEvent,
-} from '../../../types';
+} from '../../../src/types';
 
-import { PDFHighlightViewer } from '../../../PDFHighlightViewer';
+import { PDFHighlightViewer } from '../../../src/PDFHighlightViewer';
 
 import kriegerDataOld from '../../demo.json';
 import kriegerDataNew from '../../demo-new-format.json';

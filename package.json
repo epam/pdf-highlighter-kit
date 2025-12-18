@@ -20,7 +20,7 @@
   "scripts": {
     "build": "npm run build:ts && npm run build:css",
     "build:ts": "tsc -p tsconfig.json",
-    "build:css": "cp styles/*.css dist/",
+    "build:css": "cp src/styles/*.css dist/",
     "prepublishOnly": "npm run build",
     "dev": "tsc -w",
     "dev:example": "cd example && npm run dev",

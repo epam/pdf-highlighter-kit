@@ -15,7 +15,7 @@ if (!pdfjsLib.GlobalWorkerOptions.workerSrc) {
 
 export class PDFEngine {
   private pdfDocument: pdfjsLib.PDFDocumentProxy | null = null;
-  private pages: Map<number, Page> = new Map();
+  private pages = new Map<number, Page>();
   private renderingQueue: RenderingQueue = {
     high: [],
     medium: [],
@@ -130,7 +130,7 @@ export class PDFEngine {
 
   async renderPage(
     pageNumber: number,
-    scale: number = 1.5,
+    scale = 1.5,
     canvas?: HTMLCanvasElement
   ): Promise<HTMLCanvasElement> {
     console.log(`PDF Engine: renderPage ${pageNumber} at scale ${scale}`);
@@ -271,7 +271,7 @@ export class PDFEngine {
     });
   }
 
-  unloadDistantPages(currentPage: number, threshold: number = 5): void {
+  unloadDistantPages(currentPage: number, threshold = 5): void {
     this.pages.forEach((page, pageNumber) => {
       const distance = Math.abs(pageNumber - currentPage);
       if (distance > threshold && page.rendered) {
