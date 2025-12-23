@@ -10,7 +10,8 @@
     "convert:demo": "node scripts/convert-demo.js"
   },
   "dependencies": {
-    "@epam/pdf-highlighter-kit": "0.0.2",
+    "@epam/ai-dial-ui-kit": "^0.5.0",
+    "@epam/pdf-highlighter-kit": "0.0.3",
     "pdfjs-dist": "^5.4.149",
     "react": "^19.2.3",
     "react-dom": "^19.2.3"

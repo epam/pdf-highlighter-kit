@@ -1,12 +1,17 @@
 import {
   TextContent,
-  HighlightData,
   Segment,
-  AnalysisResult,
   BoundingBox,
-  TermOccurrence,
   TextItem,
+  InputHighlightData,
+  HighlightStyle,
 } from '../types';
+
+interface ItemHighlight {
+  termId: string;
+  coordinates: BoundingBox;
+  style?: HighlightStyle;
+}
 
 export class UnifiedLayerBuilder {
   private pageContainer: HTMLElement | null = null;
@@ -15,19 +20,19 @@ export class UnifiedLayerBuilder {
   // eslint-disable-next-line @typescript-eslint/no-empty-function
   constructor() {}
 
-  async buildUnifiedLayer(
+  buildUnifiedLayer(
     pageContainer: HTMLElement,
     textContent: TextContent,
-    highlights: HighlightData,
+    highlights: InputHighlightData[],
     pageNumber: number,
     scale = 1.5
-  ): Promise<HTMLElement> {
+  ): HTMLElement {
     this.pageContainer = pageContainer;
 
-    const analysis = this.analyzeContent(textContent, highlights, pageNumber);
+    const existing = pageContainer.querySelector('.unified-layer');
+    if (existing) existing.remove();
 
     const segments = this.segmentTextWithHighlights(textContent, highlights, pageNumber);
-
     const unifiedLayer = this.buildDOM(segments, scale);
 
     this.positionLayer(unifiedLayer, pageContainer);
@@ -36,116 +41,45 @@ export class UnifiedLayerBuilder {
     return unifiedLayer;
   }
 
-  private analyzeContent(
+  updateHighlights(
+    pageContainer: HTMLElement,
+    highlights: InputHighlightData[],
+    pageNumber: number,
     textContent: TextContent,
-    highlights: HighlightData,
+    scale = 1.5
+  ): void {
+    this.buildUnifiedLayer(pageContainer, textContent, highlights, pageNumber, scale);
+  }
+
+  private buildPageHighlights(
+    highlights: InputHighlightData[],
     pageNumber: number
-  ): AnalysisResult {
-    const highlightRanges: {
-      start: number;
-      end: number;
-      termId: string;
-      category: string;
-      coordinates: BoundingBox;
-    }[] = [];
-
-    Object.entries(highlights).forEach(([category, categoryData]) => {
-      const pageHighlights = categoryData.pages[pageNumber.toString()];
-      if (pageHighlights) {
-        pageHighlights.forEach((occurrence) => {
-          occurrence.coordinates.forEach((coord) => {
-            const intersectingItems = this.findIntersectingTextItems(textContent.items, coord);
-            intersectingItems.forEach(({ item, startIndex, endIndex }) => {
-              highlightRanges.push({
-                start: startIndex,
-                end: endIndex,
-                termId: occurrence.termId,
-                category,
-                coordinates: coord,
-              });
-            });
-          });
+  ): ItemHighlight[] {
+    const out: ItemHighlight[] = [];
+    for (const h of highlights) {
+      for (const b of h.bboxes) {
+        if (b.page !== pageNumber) continue;
+        out.push({
+          termId: h.id,
+          style: h.style,
+          coordinates: { x1: b.x1, y1: b.y1, x2: b.x2, y2: b.y2 },
         });
       }
-    });
-
-    highlightRanges.sort((a, b) => a.start - b.start);
-
-    return {
-      segments: [],
-      highlightRanges,
-    };
-  }
-
-  private findIntersectingTextItems(
-    textItems: TextItem[],
-    coordinates: BoundingBox
-  ): { item: TextItem; startIndex: number; endIndex: number; itemIndex: number }[] {
-    const intersecting: {
-      item: TextItem;
-      startIndex: number;
-      endIndex: number;
-      itemIndex: number;
-    }[] = [];
-    let globalIndex = 0;
-
-    textItems.forEach((item, itemIndex) => {
-      const itemBounds = this.getTextItemBounds(item);
-
-      if (this.boundsIntersect(itemBounds, coordinates)) {
-        intersecting.push({
-          item,
-          startIndex: globalIndex,
-          endIndex: globalIndex + item.str.length,
-          itemIndex,
-        });
-      }
-
-      globalIndex += item.str.length;
-    });
-
-    return intersecting;
-  }
-
-  private getTextItemBounds(item: TextItem): BoundingBox {
-    const transform = item.transform;
-    const x = transform[4];
-    const y = transform[5];
-
-    return {
-      x1: x,
-      y1: y - item.height,
-      x2: x + item.width,
-      y2: y,
-    };
-  }
-
-  private boundsIntersect(bounds1: BoundingBox, bounds2: BoundingBox): boolean {
-    return !(
-      bounds1.x2 < bounds2.x1 ||
-      bounds1.x1 > bounds2.x2 ||
-      bounds1.y2 < bounds2.y1 ||
-      bounds1.y1 > bounds2.y2
-    );
+    }
+    return out;
   }
 
   private segmentTextWithHighlights(
     textContent: TextContent,
-    highlights: HighlightData,
+    highlights: InputHighlightData[],
     pageNumber: number
   ): Segment[] {
     const segments: Segment[] = [];
-    const analysis = this.analyzeContent(textContent, highlights, pageNumber);
+    const pageHighlights = this.buildPageHighlights(highlights, pageNumber);
 
-    textContent.items.forEach((textItem, itemIndex) => {
+    textContent.items.forEach((textItem) => {
       const itemBounds = this.getTextItemBounds(textItem);
-
-      const itemHighlights = this.getHighlightsForTextItem(
-        textItem,
-        itemBounds,
-        highlights,
-        pageNumber
-      );
+      const itemHighlights = this.getHighlightsForTextItem(itemBounds, pageHighlights);
 
       if (itemHighlights.length === 0) {
         segments.push({
@@ -165,49 +99,32 @@ export class UnifiedLayerBuilder {
   }
 
   private getHighlightsForTextItem(
-    textItem: TextItem,
     itemBounds: BoundingBox,
-    highlights: HighlightData,
-    pageNumber: number
-  ): { termId: string; category: string; coordinates: BoundingBox }[] {
-    const itemHighlights: { termId: string; category: string; coordinates: BoundingBox }[] = [];
-
-    Object.entries(highlights).forEach(([category, categoryData]) => {
-      const pageHighlights = categoryData.pages[pageNumber.toString()];
-      if (pageHighlights) {
-        pageHighlights.forEach((occurrence) => {
-          occurrence.coordinates.forEach((coord) => {
-            if (this.boundsIntersect(itemBounds, coord)) {
-              itemHighlights.push({
-                termId: occurrence.termId,
-                category,
-                coordinates: coord,
-              });
-            }
-          });
-        });
-      }
-    });
-
+    pageHighlights: ItemHighlight[]
+  ): ItemHighlight[] {
+    const itemHighlights: ItemHighlight[] = [];
+    for (const h of pageHighlights) {
+      if (this.boundsIntersect(itemBounds, h.coordinates)) itemHighlights.push(h);
+    }
     return itemHighlights;
   }
 
   private createHighlightedSegments(
     textItem: TextItem,
-    itemHighlights: { termId: string; category: string; coordinates: BoundingBox }[]
+    itemHighlights: ItemHighlight[]
   ): Segment[] {
     const segments: Segment[] = [];
     const itemBounds = this.getTextItemBounds(textItem);
 
-    const primaryHighlight = itemHighlights[0];
+    const primary = itemHighlights[0];
 
     segments.push({
       text: textItem.str,
       bounds: itemBounds,
       hasHighlight: true,
       highlightInfo: {
-        termId: primaryHighlight.termId,
-        category: primaryHighlight.category,
+        termId: primary.termId,
+        style: primary.style,
       },
       transform: textItem.transform,
       fontName: textItem.fontName,
@@ -234,20 +151,14 @@ export class UnifiedLayerBuilder {
     }
 
     merged.push(current);
-
     return merged;
   }
 
   private canMergeSegments(segment1: Segment, segment2: Segment): boolean {
-    if (segment1.hasHighlight !== segment2.hasHighlight) {
-      return false;
-    }
+    if (segment1.hasHighlight !== segment2.hasHighlight) return false;
 
     if (segment1.hasHighlight && segment2.hasHighlight) {
-      return (
-        segment1.highlightInfo?.category === segment2.highlightInfo?.category &&
-        segment1.highlightInfo?.termId === segment2.highlightInfo?.termId
-      );
+      return segment1.highlightInfo?.termId === segment2.highlightInfo?.termId;
     }
 
     return segment1.fontName === segment2.fontName;
@@ -273,56 +184,99 @@ export class UnifiedLayerBuilder {
     const unifiedLayer = document.createElement('div');
     unifiedLayer.className = 'unified-layer';
 
-    const fragment = document.createDocumentFragment();
-    const batch: HTMLElement[] = [];
-
-    segments.forEach((segment, index) => {
-      const element = segment.hasHighlight
+    segments.forEach((segment) => {
+      const el = segment.hasHighlight
         ? this.createHighlightElement(segment, scale)
         : this.createTextElement(segment, scale);
-
-      batch.push(element);
-
-      if (batch.length >= 100) {
-        batch.forEach((el) => fragment.appendChild(el));
-        batch.length = 0;
-      }
+      unifiedLayer.appendChild(el);
     });
 
-    batch.forEach((el) => fragment.appendChild(el));
-
-    unifiedLayer.appendChild(fragment);
     return unifiedLayer;
   }
 
   private createTextElement(segment: Segment, scale: number): HTMLElement {
     const span = document.createElement('span');
-    span.className = 'text-segment';
+    span.className = 'text-segment selectable';
     span.textContent = segment.text;
 
     this.applyTextPositioning(span, segment, scale);
-
     return span;
   }
 
   private createHighlightElement(segment: Segment, scale: number): HTMLElement {
     const wrapper = document.createElement('span');
-    wrapper.className = `highlight-wrapper ${segment.highlightInfo?.category}-highlight`;
+    wrapper.className = 'highlight-wrapper';
     wrapper.setAttribute('data-term-id', segment.highlightInfo?.termId || '');
+
+    // Background (visual highlight)
+    const background = document.createElement('span');
+    background.className = 'highlight-background';
+    background.style.position = 'absolute';
+    background.style.left = '0';
+    background.style.top = '0';
+    background.style.right = '0';
+    background.style.bottom = '0';
+    background.style.pointerEvents = 'none';
 
     const textSpan = document.createElement('span');
     textSpan.className = 'text-segment selectable';
     textSpan.textContent = segment.text;
+    textSpan.style.position = 'relative';
+    textSpan.style.zIndex = '1';
 
-    const background = document.createElement('span');
-    background.className = 'highlight-background';
-
-    wrapper.appendChild(textSpan);
     wrapper.appendChild(background);
+    wrapper.appendChild(textSpan);
+
+    this.applyInlineHighlightStyle(background, segment.highlightInfo?.style);
 
     this.applyTextPositioning(wrapper, segment, scale);
+    wrapper.style.position = 'absolute'; // ensure background absolute positioning works
+    wrapper.style.userSelect = 'text';
 
     return wrapper;
+  }
+
+  private applyInlineHighlightStyle(el: HTMLElement, style?: HighlightStyle): void {
+    if (!style?.backgroundColor) return;
+
+    const bg = style.backgroundColor;
+    el.style.backgroundColor = bg;
+
+    const borderColor = style.borderColor || bg;
+    const borderWidth = style.borderWidth || '1px';
+    el.style.border = `${borderWidth} solid ${borderColor}`;
+
+    const baseOpacity = typeof style.opacity === 'number' ? style.opacity : 0.3;
+    el.style.opacity = String(baseOpacity);
+    el.dataset.baseOpacity = String(baseOpacity);
+
+    const hoverOpacity =
+      typeof style.hoverOpacity === 'number'
+        ? style.hoverOpacity
+        : Math.min(0.6, baseOpacity + 0.2);
+    el.dataset.hoverOpacity = String(hoverOpacity);
+  }
+
+  private getTextItemBounds(item: TextItem): BoundingBox {
+    // item.transform: [a, b, c, d, e, f]
+    // e,f are translation; widths/heights are approximations based on item.width/height where available
+    const x = item.transform[4];
+    const y = item.transform[5];
+
+    // Fallbacks (pdf.js items differ)
+    const w = (item.width ?? 0) as number;
+    const h = (item.height ?? 0) as number;
+
+    return {
+      x1: x,
+      y1: y - h,
+      x2: x + w,
+      y2: y,
+    };
+  }
+
+  private boundsIntersect(a: BoundingBox, b: BoundingBox): boolean {
+    return !(a.x2 < b.x1 || a.x1 > b.x2 || a.y2 < b.y1 || a.y1 > b.y2);
   }
 
   private applyTextPositioning(element: HTMLElement, segment: Segment, scale: number): void {
@@ -332,7 +286,6 @@ export class UnifiedLayerBuilder {
     const scaleX = transform[0] * scale;
     const scaleY = transform[3] * scale;
 
-    element.style.position = 'absolute';
     element.style.left = `${x}px`;
     element.style.top = `${y}px`;
     element.style.transform = `scale(${scaleX}, ${scaleY})`;
@@ -354,88 +307,49 @@ export class UnifiedLayerBuilder {
     unifiedLayer.style.pointerEvents = 'auto';
     unifiedLayer.style.opacity = '1';
 
-    const style = document.createElement('style');
-    style.textContent = `
-      .unified-layer .text-segment,
-      .unified-layer .highlight-wrapper {
-        pointer-events: auto;
-        cursor: pointer;
-      }
-      .unified-layer .highlight-wrapper {
-        background-color: rgba(102, 126, 234, 0.15);
-      }
-      .unified-layer .highlight-wrapper:hover {
-        background-color: rgba(102, 126, 234, 0.25);
-      }
-      .highlight.selected-term,
-      .unified-layer .highlight-wrapper.selected-term,
-      div.highlight.selected-term,
-      div.highlight-wrapper.selected-term {
-        opacity: 1 !important;
-        filter: brightness(2) contrast(1.5) saturate(2) !important;
-        box-shadow: 0 0 0 3px rgba(255, 255, 255, 1), 0 0 10px rgba(255, 255, 0, 0.8), 0 0 20px rgba(255, 255, 0, 0.4) !important;
-        z-index: 15 !important;
-        transform: scale(1.1) !important;
-        transition: all 0.3s ease !important;
-        border-width: 3px !important;
-        outline: 2px solid rgba(255, 255, 255, 0.9) !important;
-        outline-offset: 1px !important;
-      }
-      .highlight.dimmed-highlight,
-      .unified-layer .highlight-wrapper.dimmed-highlight,
-      div.highlight.dimmed-highlight,
-      div.highlight-wrapper.dimmed-highlight {
-        opacity: 0.15 !important;
-        filter: brightness(0.4) contrast(0.6) saturate(0.3) grayscale(0.3) !important;
-        transition: all 0.3s ease !important;
-      }
-      .highlight,
-      .unified-layer .highlight-wrapper,
-      div.highlight,
-      div.highlight-wrapper {
-        transition: all 0.3s ease;
-      }
-    `;
-    document.head.appendChild(style);
+    const STYLE_ID = 'pdf-highlighter-unified-layer-style';
+    if (!document.getElementById(STYLE_ID)) {
+      const style = document.createElement('style');
+      style.id = STYLE_ID;
+      style.textContent = `
+        .unified-layer .text-segment,
+        .unified-layer .highlight-wrapper {
+          pointer-events: auto;
+          cursor: pointer;
+        }
+        .highlight.selected-term,
+        .unified-layer .highlight-wrapper.selected-term,
+        div.highlight.selected-term,
+        div.highlight-wrapper.selected-term {
+          opacity: 1 !important;
+          filter: brightness(2) contrast(1.5) saturate(2) !important;
+          box-shadow: 0 0 0 3px rgba(255, 255, 255, 1), 0 0 10px rgba(255, 255, 0, 0.8), 0 0 20px rgba(255, 255, 0, 0.4) !important;
+          z-index: 15 !important;
+          transform: scale(1.1) !important;
+          transition: all 0.3s ease !important;
+          border-width: 3px !important;
+          outline: 2px solid rgba(255, 255, 255, 0.9) !important;
+          outline-offset: 1px !important;
+        }
+        .highlight.dimmed-highlight,
+        .unified-layer .highlight-wrapper.dimmed-highlight,
+        div.highlight.dimmed-highlight,
+        div.highlight-wrapper.dimmed-highlight {
+          opacity: 0.15 !important;
+          filter: brightness(0.4) contrast(0.8) saturate(0.5) !important;
+          transition: all 0.3s ease !important;
+        }
+        .highlight,
+        .unified-layer .highlight-wrapper,
+        div.highlight,
+        div.highlight-wrapper {
+          transition: all 0.3s ease;
+        }
+      `;
+      document.head.appendChild(style);
+    }
 
     pageContainer.appendChild(unifiedLayer);
-  }
-
-  updateHighlights(highlights: HighlightData, pageNumber: number, textContent?: TextContent): void {
-    if (!this.unifiedLayer || !this.pageContainer) {
-      throw new Error('Unified layer not initialized');
-    }
-
-    if (textContent) {
-      this.buildUnifiedLayer(this.pageContainer, textContent, highlights, pageNumber);
-    } else {
-      this.updateExistingHighlights(highlights, pageNumber);
-    }
-  }
-
-  private updateExistingHighlights(highlights: HighlightData, pageNumber: number): void {
-    if (!this.unifiedLayer) return;
-
-    const existingHighlights = this.unifiedLayer.querySelectorAll('.highlight-wrapper');
-    existingHighlights.forEach((highlight) => {
-      highlight.classList.remove(
-        ...Array.from(highlight.classList).filter((cls) => cls.endsWith('-highlight'))
-      );
-    });
-
-    Object.entries(highlights).forEach(([category, categoryData]) => {
-      const pageHighlights = categoryData.pages[pageNumber.toString()];
-      if (pageHighlights) {
-        pageHighlights.forEach((occurrence) => {
-          const elements = this.unifiedLayer!.querySelectorAll(
-            `[data-term-id="${occurrence.termId}"]`
-          );
-          elements.forEach((element) => {
-            element.classList.add(`${category}-highlight`);
-          });
-        });
-      }
-    });
   }
 
   clear(): void {

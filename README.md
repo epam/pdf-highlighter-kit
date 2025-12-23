@@ -8,17 +8,21 @@ High-performance PDF viewer with intelligent highlighting and text selection cap
 npm install @epam/pdf-highlighter-kit pdfjs-dist
 ```
 
+> Peer dependency: `pdfjs-dist` (see Requirements).
+
 ## Quick Start
 
-```typescript
+```ts
 import { PDFHighlightViewer } from '@epam/pdf-highlighter-kit';
+import type { InputHighlightData } from '@epam/pdf-highlighter-kit';
 import '@epam/pdf-highlighter-kit/styles/pdf-highlight-viewer.css';
 
 // Create viewer instance
 const viewer = new PDFHighlightViewer();
 
 // Initialize with container element
-const container = document.getElementById('pdf-container');
+const container = document.getElementById('pdf-container') as HTMLElement;
+
 await viewer.init(container, {
   enableTextSelection: true,
   enableVirtualScrolling: true,
@@ -30,34 +34,73 @@ await viewer.init(container, {
 // Load PDF document
 await viewer.loadPDF('/path/to/document.pdf');
 
-// Add highlights
-viewer.loadHighlights({
-  category1: {
-    pages: {
-      '1': [
-        {
-          termId: 'term-001',
-          coordinates: [{ x1: 100, y1: 200, x2: 300, y2: 220 }],
-        },
-      ],
+// Highlights
+const highlights: InputHighlightData[] = [
+  {
+    id: 'term-001',
+    bboxes: [
+      // page is 1-based
+      { page: 1, x1: 100, y1: 200, x2: 300, y2: 220 },
+      { page: 3, x1: 80, y1: 140, x2: 260, y2: 160 },
+    ],
+    style: {
+      backgroundColor: '#ffeb3b',
+      opacity: 0.3,
+      borderColor: '#d4c400',
+      borderWidth: '1px',
     },
-    terms: {
-      'term-001': {
-        term: 'Important Term',
-        category: 'category1',
-        frequency: 5,
-        pages: [1, 3, 7],
-      },
+    tooltipText: 'Important Term',
+    metadata: {
+      frequency: 5,
+      tags: ['important', 'glossary'],
     },
   },
-});
+];
+
+viewer.loadHighlights(highlights);
+
+// Navigate to a highlight occurrence
+viewer.goToHighlight('term-001', 0);
+```
+
+## Data Model
+
+### `InputHighlightData`
+
+Each highlight carries its own style. No categories are required.
+
+```ts
+export interface BBox {
+  x1: number;
+  y1: number;
+  x2: number;
+  y2: number;
+  page: number;
+}
+
+export interface HighlightStyle {
+  backgroundColor: string;
+  borderColor?: string;
+  borderWidth?: string;
+  opacity?: number;
+  hoverOpacity?: number;
+  pulseAnimation?: boolean;
+}
+
+export interface InputHighlightData {
+  id: string;
+  bboxes: BBox[];
+  style?: HighlightStyle;
+  tooltipText?: string;
+  metadata?: Record<string, any>;
+}
 ```
 
 ## Configuration Options
 
 ### ViewerConfig
 
-```typescript
+```ts
 interface ViewerConfig {
   // Enable text selection functionality
   enableTextSelection?: boolean;
@@ -74,11 +117,16 @@ interface ViewerConfig {
   // Interaction mode: 'select' | 'highlight' | 'hybrid'
   interactionMode?: 'select' | 'highlight' | 'hybrid';
 
-  // Custom styles configuration
+  // Custom styles configuration (viewer/selection CSS). Highlight styles are per-highlight.
   customStyles?: StyleConfig;
 
   // PDF.js worker source URL
   workerSrc?: string;
+
+  // Highlight UI config (style is per highlight)
+  highlightsConfig?: {
+    enableMultilineHover?: boolean;
+  };
 }
 ```
 
@@ -94,13 +142,36 @@ Initialize the viewer with a container element and optional configuration.
 
 Load a PDF document from URL or ArrayBuffer.
 
-#### `loadHighlights(highlights: HighlightData): void`
+#### `loadHighlights(highlights: InputHighlightData[]): void`
 
-Load highlight data to display in the PDF.
+Replace current highlights with the provided list.
+
+#### `addHighlight(highlight: InputHighlightData): void`
+
+Add a single highlight (incremental update).
+
+#### `removeHighlight(termId: string): void`
+
+Remove highlight by its `id`.
+
+#### `updateHighlightStyle(termId: string, stylePatch: Partial<HighlightStyle>): void`
+
+Update highlight style by id (patch merge).
+
+#### `goToHighlight(termId: string, bboxIndex?: number): void`
+
+Navigate to a specific highlight occurrence. `bboxIndex` defaults to `0`.
+
+#### `nextHighlight(termId?: string): void` / `previousHighlight(termId?: string): void`
+
+Navigate across highlight occurrences:
+
+- without `termId` → across all highlights in document order
+- with `termId` → only within that highlight’s occurrences
 
 #### `goToPage(pageNumber: number): void`
 
-Navigate to a specific page.
+Navigate to a specific page (1-based).
 
 #### `zoomIn(): void` / `zoomOut(): void`
 
@@ -110,46 +181,95 @@ Zoom in or out of the PDF.
 
 Set a specific zoom level (e.g., 1.0 for 100%, 1.5 for 150%).
 
-#### `search(query: string): Promise<SearchResult[]>`
-
-Search for text in the PDF document.
-
 #### `destroy(): void`
 
 Clean up and destroy the viewer instance.
 
-### Events
+## Events
 
 The viewer emits various events that you can listen to:
 
-```typescript
-viewer.on('pageChange', (pageNumber: number) => {
-  console.log('Current page:', pageNumber);
+```ts
+viewer.addEventListener('initialized', () => {
+  console.log('Viewer initialized');
 });
 
-viewer.on('textSelected', (selection: SelectionData) => {
-  console.log('Text selected:', selection.text);
+viewer.addEventListener('pdfLoaded', (e) => {
+  console.log('PDF loaded. Total pages:', e.totalPages);
 });
 
-viewer.on('highlightClick', (highlight: HighlightInfo) => {
-  console.log('Highlight clicked:', highlight.term);
+viewer.addEventListener('pageChanged', (e) => {
+  console.log('Current page:', e.pageNumber);
+});
+
+viewer.addEventListener('zoomChanged', (e) => {
+  console.log('Zoom changed:', e.scale);
+});
+
+viewer.addEventListener('renderComplete', (e) => {
+  console.log('Page rendered:', e.pageNumber);
+});
+
+viewer.addEventListener('renderError', (e) => {
+  console.error('Render error:', e.pageNumber, e.error);
+});
+
+viewer.addEventListener('highlightsLoaded', (e) => {
+  console.log('Highlights loaded:', e.data?.length ?? 0);
+});
+
+viewer.addEventListener('highlightHover', (e) => {
+  console.log('Highlight hover:', e.termId, 'page', e.pageNumber, 'bbox', e.bboxIndex);
+});
+
+viewer.addEventListener('highlightBlur', (e) => {
+  console.log('Highlight blur:', e.termId);
+});
+
+viewer.addEventListener('highlightClick', (e) => {
+  console.log('Highlight clicked:', e.termId, 'page', e.pageNumber, 'bbox', e.bboxIndex);
+});
+
+viewer.addEventListener('navigationComplete', (e) => {
+  console.log('Navigation complete:', e.termId, e.pageNumber, e.occurrenceIndex);
+});
+
+viewer.addEventListener('selectionChanged', (e) => {
+  console.log('Text selected:', e.text);
+  console.log('Pages:', e.pageNumbers);
+  console.log('Overlapping highlights:', e.highlights); // array of bbox refs
+});
+
+viewer.addEventListener('selectionHighlighted', (e) => {
+  console.log('Selection highlighted:', e.termId);
+});
+
+viewer.addEventListener('error', (e) => {
+  console.error('Viewer error:', e);
 });
 ```
 
+> Event payload fields may include `termId`, `pageNumber`, `bboxIndex`, and `bbox` depending on event type.
+
 ## Advanced Usage
 
-### Custom Styling
+### Custom Styling (per highlight)
 
-```typescript
-const viewer = new PDFHighlightViewer();
-await viewer.init(container, {
-  customStyles: {
-    highlightColor: '#ffeb3b',
-    highlightOpacity: 0.3,
-    selectionColor: '#2196f3',
-    selectionOpacity: 0.4,
+```ts
+const highlight: InputHighlightData = {
+  id: 'note-001',
+  bboxes: [{ page: 2, x1: 120, y1: 330, x2: 420, y2: 355 }],
+  style: {
+    backgroundColor: '#ffd54f',
+    opacity: 0.25,
+    borderColor: '#ff8f00',
+    borderWidth: '1px',
+    hoverOpacity: 0.6,
   },
-});
+  tooltipText: 'My note',
+};
+
+viewer.addHighlight(highlight);
 ```
 
 ### React Integration
@@ -157,9 +277,16 @@ await viewer.init(container, {
 ```tsx
 import { useEffect, useRef } from 'react';
 import { PDFHighlightViewer } from '@epam/pdf-highlighter-kit';
+import type { InputHighlightData } from '@epam/pdf-highlighter-kit';
 import '@epam/pdf-highlighter-kit/styles/pdf-highlight-viewer.css';
 
-function PDFViewer({ pdfUrl, highlights }) {
+export function PDFViewer({
+  pdfUrl,
+  highlights,
+}: {
+  pdfUrl: string;
+  highlights: InputHighlightData[];
+}) {
   const containerRef = useRef<HTMLDivElement>(null);
   const viewerRef = useRef<PDFHighlightViewer | null>(null);
 
@@ -169,27 +296,24 @@ function PDFViewer({ pdfUrl, highlights }) {
     const viewer = new PDFHighlightViewer();
     viewerRef.current = viewer;
 
-    viewer
-      .init(containerRef.current, {
+    (async () => {
+      await viewer.init(containerRef.current!, {
         enableTextSelection: true,
         enableVirtualScrolling: true,
-      })
-      .then(() => {
-        viewer.loadPDF(pdfUrl);
-        if (highlights) {
-          viewer.loadHighlights(highlights);
-        }
       });
+
+      await viewer.loadPDF(pdfUrl);
+      viewer.loadHighlights(highlights);
+    })();
 
     return () => {
       viewer.destroy();
+      viewerRef.current = null;
     };
   }, [pdfUrl]);
 
   useEffect(() => {
-    if (viewerRef.current && highlights) {
-      viewerRef.current.loadHighlights(highlights);
-    }
+    viewerRef.current?.loadHighlights(highlights);
   }, [highlights]);
 
   return <div ref={containerRef} style={{ width: '100%', height: '100vh' }} />;
@@ -216,4 +340,4 @@ Contributions are welcome! Please feel free to submit a Pull Request.
 
 ## Support
 
-For issues and questions, please use the [GitHub Issues](https://github.com/epam/pdf-highlighter-kit/issues) page.
+For issues and questions, please use the GitHub Issues page.

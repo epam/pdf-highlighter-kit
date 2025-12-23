@@ -1,4 +1,11 @@
-import { TextContent, TextItem, BoundingBox, Segment, HighlightData } from '../types';
+import {
+  TextContent,
+  TextItem,
+  BoundingBox,
+  Segment,
+  InputHighlightData,
+  HighlightStyle,
+} from '../types';
 
 export interface SegmentationPoint {
   globalIndex: number;
@@ -11,9 +18,9 @@ export interface HighlightRange {
   startIndex: number;
   endIndex: number;
   termId: string;
-  category: string;
   coordinates: BoundingBox;
-  priority: number; // For handling overlapping highlights
+  priority: number; // Used to keep deterministic order when overlaps exist
+  style?: HighlightStyle;
 }
 
 export class TextSegmentation {
@@ -23,7 +30,15 @@ export class TextSegmentation {
     this.debugMode = debugMode;
   }
 
-  segmentText(textContent: TextContent, highlights: HighlightData, pageNumber: number): Segment[] {
+  /**
+   * Split text items into segments based on highlight boundaries and typography changes.
+   * Input highlights are provided as InputHighlightData[].
+   */
+  segmentText(
+    textContent: TextContent,
+    highlights: InputHighlightData[],
+    pageNumber: number
+  ): Segment[] {
     const characterIndex = this.buildCharacterIndex(textContent.items);
 
     const highlightRanges = this.mapHighlightsToCharacters(
@@ -44,26 +59,26 @@ export class TextSegmentation {
     return this.optimizeSegments(segments);
   }
 
-  private buildCharacterIndex(textItems: TextItem[]): Array<{
+  private buildCharacterIndex(textItems: TextItem[]): {
     char: string;
     itemIndex: number;
     charIndex: number;
     globalIndex: number;
     bounds: BoundingBox;
-  }> {
-    const index: Array<{
+  }[] {
+    const index: {
       char: string;
       itemIndex: number;
       charIndex: number;
       globalIndex: number;
       bounds: BoundingBox;
-    }> = [];
+    }[] = [];
 
     let globalIndex = 0;
 
     textItems.forEach((item, itemIndex) => {
       const itemBounds = this.getTextItemBounds(item);
-      const charWidth = item.width / item.str.length;
+      const charWidth = item.str.length > 0 ? item.width / item.str.length : 0;
 
       for (let charIndex = 0; charIndex < item.str.length; charIndex++) {
         const char = item.str[charIndex];
@@ -91,32 +106,32 @@ export class TextSegmentation {
   }
 
   private mapHighlightsToCharacters(
-    highlights: HighlightData,
+    highlights: InputHighlightData[],
     pageNumber: number,
     textItems: TextItem[]
   ): HighlightRange[] {
     const ranges: HighlightRange[] = [];
 
-    Object.entries(highlights).forEach(([category, categoryData]) => {
-      const pageHighlights = categoryData.pages[pageNumber.toString()];
-      if (!pageHighlights) return;
+    highlights.forEach((highlight, highlightIndex) => {
+      for (let bboxIndex = 0; bboxIndex < highlight.bboxes.length; bboxIndex++) {
+        const bbox = highlight.bboxes[bboxIndex];
+        if (bbox.page !== pageNumber) continue;
 
-      pageHighlights.forEach((occurrence, occIndex) => {
-        occurrence.coordinates.forEach((coord, _coordIndex) => {
-          const textMatches = this.findTextMatchesForCoordinate(coord, textItems);
+        const coord: BoundingBox = { x1: bbox.x1, y1: bbox.y1, x2: bbox.x2, y2: bbox.y2 };
 
-          textMatches.forEach((match) => {
-            ranges.push({
-              startIndex: match.startIndex,
-              endIndex: match.endIndex,
-              termId: occurrence.termId,
-              category,
-              coordinates: coord,
-              priority: this.calculateHighlightPriority(category, occIndex),
-            });
+        const textMatches = this.findTextMatchesForCoordinate(coord, textItems);
+
+        textMatches.forEach((match) => {
+          ranges.push({
+            startIndex: match.startIndex,
+            endIndex: match.endIndex,
+            termId: highlight.id,
+            coordinates: coord,
+            style: highlight.style,
+            priority: this.calculateHighlightPriority(highlightIndex, bboxIndex),
           });
         });
-      });
+      }
     });
 
     ranges.sort((a, b) => {
@@ -129,11 +144,17 @@ export class TextSegmentation {
     return this.resolveOverlappingHighlights(ranges);
   }
 
+  private calculateHighlightPriority(highlightIndex: number, bboxIndex: number): number {
+    // Deterministic ordering: earlier highlights win ties, earlier bboxes win ties.
+    // Large base to keep values positive and comparable.
+    return 1_000_000 - highlightIndex * 1_000 - bboxIndex;
+  }
+
   private findTextMatchesForCoordinate(
     coord: BoundingBox,
     textItems: TextItem[]
-  ): Array<{ startIndex: number; endIndex: number }> {
-    const matches: Array<{ startIndex: number; endIndex: number }> = [];
+  ): { startIndex: number; endIndex: number }[] {
+    const matches: { startIndex: number; endIndex: number }[] = [];
     let globalIndex = 0;
 
     textItems.forEach((item) => {
@@ -142,7 +163,7 @@ export class TextSegmentation {
       if (this.boundsIntersect(itemBounds, coord)) {
         const intersectionArea = this.calculateIntersectionArea(itemBounds, coord);
         const itemArea = (itemBounds.x2 - itemBounds.x1) * (itemBounds.y2 - itemBounds.y1);
-        const overlapPercent = intersectionArea / itemArea;
+        const overlapPercent = itemArea > 0 ? intersectionArea / itemArea : 0;
 
         if (overlapPercent > 0.5) {
           matches.push({
@@ -167,30 +188,28 @@ export class TextSegmentation {
     if (left >= right || top >= bottom) {
       return 0;
     }
-
     return (right - left) * (bottom - top);
   }
 
   private mergeAdjacentMatches(
-    matches: Array<{ startIndex: number; endIndex: number }>
-  ): Array<{ startIndex: number; endIndex: number }> {
+    matches: { startIndex: number; endIndex: number }[]
+  ): { startIndex: number; endIndex: number }[] {
     if (matches.length <= 1) return matches;
 
-    const merged: Array<{ startIndex: number; endIndex: number }> = [];
-    let current = matches[0];
+    const sorted = [...matches].sort((a, b) => a.startIndex - b.startIndex);
+    const merged: { startIndex: number; endIndex: number }[] = [sorted[0]];
 
-    for (let i = 1; i < matches.length; i++) {
-      const next = matches[i];
+    for (let i = 1; i < sorted.length; i++) {
+      const last = merged[merged.length - 1];
+      const current = sorted[i];
 
-      if (current.endIndex >= next.startIndex) {
-        current.endIndex = Math.max(current.endIndex, next.endIndex);
+      if (current.startIndex <= last.endIndex + 1) {
+        last.endIndex = Math.max(last.endIndex, current.endIndex);
       } else {
         merged.push(current);
-        current = next;
       }
     }
 
-    merged.push(current);
     return merged;
   }
 
@@ -219,121 +238,76 @@ export class TextSegmentation {
     range: HighlightRange,
     overlapping: HighlightRange[]
   ): HighlightRange[] {
-    const splits: HighlightRange[] = [];
-    let currentStart = range.startIndex;
+    const points = new Set<number>([range.startIndex, range.endIndex]);
+    overlapping.forEach((o) => {
+      points.add(o.startIndex);
+      points.add(o.endIndex);
+    });
 
-    overlapping.sort((a, b) => a.startIndex - b.startIndex);
+    const sorted = Array.from(points).sort((a, b) => a - b);
+    const result: HighlightRange[] = [];
 
-    for (const overlap of overlapping) {
-      if (currentStart < overlap.startIndex) {
-        splits.push({
-          ...range,
-          startIndex: currentStart,
-          endIndex: Math.min(range.endIndex, overlap.startIndex),
-        });
+    for (let i = 0; i < sorted.length - 1; i++) {
+      const a = sorted[i];
+      const b = sorted[i + 1];
+
+      if (a >= range.startIndex && b <= range.endIndex && a < b) {
+        result.push({ ...range, startIndex: a, endIndex: b });
       }
-
-      currentStart = Math.max(currentStart, overlap.endIndex);
     }
 
-    if (currentStart < range.endIndex) {
-      splits.push({
-        ...range,
-        startIndex: currentStart,
-        endIndex: range.endIndex,
-      });
-    }
-
-    return splits.filter((split) => split.startIndex < split.endIndex);
-  }
-
-  private calculateHighlightPriority(category: string, occurrenceIndex: number): number {
-    const categoryPriorities: Record<string, number> = {
-      protein: 100,
-      gene: 90,
-      disease: 80,
-      chemical: 70,
-      species: 60,
-      default: 50,
-    };
-
-    const basePriority = categoryPriorities[category] || categoryPriorities['default'];
-    return basePriority - occurrenceIndex;
+    return result;
   }
 
   private findSegmentationPoints(
     textItems: TextItem[],
     highlightRanges: HighlightRange[]
   ): SegmentationPoint[] {
-    const points: SegmentationPoint[] = [];
-    let globalIndex = 0;
+    const points: SegmentationPoint[] = [
+      { globalIndex: 0, itemIndex: 0, charIndex: 0, reason: 'line-break' },
+    ];
 
-    textItems.forEach((item, itemIndex) => {
-      if (itemIndex > 0) {
-        points.push({
-          globalIndex,
-          itemIndex,
-          charIndex: 0,
-          reason: 'font-change',
-        });
-      }
-      globalIndex += item.str.length;
-    });
-
+    // highlight boundary points
     highlightRanges.forEach((range) => {
       points.push({
         globalIndex: range.startIndex,
-        itemIndex: this.getItemIndexForGlobalIndex(range.startIndex, textItems),
-        charIndex: this.getCharIndexForGlobalIndex(range.startIndex, textItems),
+        itemIndex: 0,
+        charIndex: 0,
         reason: 'highlight-start',
       });
-
       points.push({
         globalIndex: range.endIndex,
-        itemIndex: this.getItemIndexForGlobalIndex(range.endIndex, textItems),
-        charIndex: this.getCharIndexForGlobalIndex(range.endIndex, textItems),
+        itemIndex: 0,
+        charIndex: 0,
         reason: 'highlight-end',
       });
     });
 
-    points.sort((a, b) => a.globalIndex - b.globalIndex);
-    return this.removeDuplicatePoints(points);
-  }
+    let globalIndex = 0;
+    for (let itemIndex = 0; itemIndex < textItems.length; itemIndex++) {
+      const item = textItems[itemIndex];
 
-  private getItemIndexForGlobalIndex(globalIndex: number, textItems: TextItem[]): number {
-    let currentIndex = 0;
-    for (let i = 0; i < textItems.length; i++) {
-      if (globalIndex < currentIndex + textItems[i].str.length) {
-        return i;
+      if (itemIndex > 0) {
+        const prev = textItems[itemIndex - 1];
+        if (prev.fontName !== item.fontName) {
+          points.push({ globalIndex, itemIndex, charIndex: 0, reason: 'font-change' });
+        }
+
+        // Heuristic: treat significant Y jump as a line break
+        if (Math.abs(prev.transform[5] - item.transform[5]) > 3) {
+          points.push({ globalIndex, itemIndex, charIndex: 0, reason: 'line-break' });
+        }
       }
-      currentIndex += textItems[i].str.length;
-    }
-    return textItems.length - 1;
-  }
 
-  private getCharIndexForGlobalIndex(globalIndex: number, textItems: TextItem[]): number {
-    let currentIndex = 0;
-    for (let i = 0; i < textItems.length; i++) {
-      if (globalIndex < currentIndex + textItems[i].str.length) {
-        return globalIndex - currentIndex;
-      }
-      currentIndex += textItems[i].str.length;
-    }
-    return 0;
-  }
-
-  private removeDuplicatePoints(points: SegmentationPoint[]): SegmentationPoint[] {
-    const unique: SegmentationPoint[] = [];
-    let lastIndex = -1;
-
-    for (const point of points) {
-      if (point.globalIndex !== lastIndex) {
-        unique.push(point);
-        lastIndex = point.globalIndex;
-      }
+      globalIndex += item.str.length;
     }
 
-    return unique;
+    const unique = new Map<number, SegmentationPoint>();
+    points.forEach((p) => {
+      if (!unique.has(p.globalIndex)) unique.set(p.globalIndex, p);
+    });
+
+    return Array.from(unique.values()).sort((a, b) => a.globalIndex - b.globalIndex);
   }
 
   private createSegments(
@@ -356,9 +330,7 @@ export class TextSegmentation {
         highlightRanges
       );
 
-      if (segment) {
-        segments.push(segment);
-      }
+      if (segment) segments.push(segment);
     }
 
     return segments;
@@ -371,25 +343,25 @@ export class TextSegmentation {
     characterIndex: ReturnType<typeof this.buildCharacterIndex>,
     highlightRanges: HighlightRange[]
   ): Segment | null {
-    if (startIndex >= endIndex || startIndex >= characterIndex.length) {
-      return null;
-    }
+    if (startIndex >= endIndex || startIndex >= characterIndex.length) return null;
 
     const startChar = characterIndex[startIndex];
-    const endIdx = Math.min(endIndex - 1, characterIndex.length - 1);
-    const endChar = characterIndex[endIdx];
 
-    const text = characterIndex
-      .slice(startIndex, endIndex)
-      .map((char) => char.char)
-      .join('');
+    let text = '';
+    for (let i = startIndex; i < endIndex && i < characterIndex.length; i++) {
+      text += characterIndex[i].char;
+    }
 
-    const bounds: BoundingBox = {
-      x1: startChar.bounds.x1,
-      y1: Math.min(startChar.bounds.y1, endChar.bounds.y1),
-      x2: endChar.bounds.x2,
-      y2: Math.max(startChar.bounds.y2, endChar.bounds.y2),
-    };
+    let bounds: BoundingBox = { x1: Infinity, y1: Infinity, x2: -Infinity, y2: -Infinity };
+    for (let i = startIndex; i < endIndex && i < characterIndex.length; i++) {
+      const b = characterIndex[i].bounds;
+      bounds = {
+        x1: Math.min(bounds.x1, b.x1),
+        y1: Math.min(bounds.y1, b.y1),
+        x2: Math.max(bounds.x2, b.x2),
+        y2: Math.max(bounds.y2, b.y2),
+      };
+    }
 
     const overlappingHighlight = highlightRanges.find(
       (range) => startIndex >= range.startIndex && endIndex <= range.endIndex
@@ -404,7 +376,7 @@ export class TextSegmentation {
       highlightInfo: overlappingHighlight
         ? {
             termId: overlappingHighlight.termId,
-            category: overlappingHighlight.category,
+            style: overlappingHighlight.style,
           }
         : undefined,
       transform: textItem.transform,
@@ -430,23 +402,15 @@ export class TextSegmentation {
       }
     }
 
-    if (current) {
-      optimized.push(current);
-    }
-
+    if (current) optimized.push(current);
     return optimized;
   }
 
   private canMergeSegments(segment1: Segment, segment2: Segment): boolean {
-    if (segment1.hasHighlight !== segment2.hasHighlight) {
-      return false;
-    }
+    if (segment1.hasHighlight !== segment2.hasHighlight) return false;
 
     if (segment1.hasHighlight && segment2.hasHighlight) {
-      return (
-        segment1.highlightInfo?.termId === segment2.highlightInfo?.termId &&
-        segment1.highlightInfo?.category === segment2.highlightInfo?.category
-      );
+      return segment1.highlightInfo?.termId === segment2.highlightInfo?.termId;
     }
 
     return segment1.fontName === segment2.fontName;
@@ -470,11 +434,15 @@ export class TextSegmentation {
 
   private getTextItemBounds(item: TextItem): BoundingBox {
     const transform = item.transform;
+    const x = transform[4];
+    const y = transform[5];
+    const height = item.height;
+
     return {
-      x1: transform[4],
-      y1: transform[5] - item.height,
-      x2: transform[4] + item.width,
-      y2: transform[5],
+      x1: x,
+      y1: y - height,
+      x2: x + item.width,
+      y2: y,
     };
   }
 

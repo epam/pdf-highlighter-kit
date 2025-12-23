@@ -1,15 +1,13 @@
 import {
   ViewerOptions,
-  HighlightData,
-  TermOccurrence,
-  CategoryStyle,
   TextRange,
   SelectionWithMetadata,
   PerformanceMetrics,
   HighlightAnalytics,
   AccessibilityFeatures,
   InteractionMode,
-  TermMetadata,
+  InputHighlightData,
+  HighlightStyle,
 } from './types';
 
 export interface PDFHighlightViewer {
@@ -29,15 +27,13 @@ export interface PDFHighlightViewer {
 
   getTotalPages(): number;
 
-  loadHighlights(data: HighlightData): void;
+  loadHighlights(data: InputHighlightData[]): void;
 
-  addHighlight(pageNumber: number, highlight: TermOccurrence): void;
+  addHighlight(highlight: InputHighlightData): void;
 
   removeHighlight(termId: string): void;
 
-  updateHighlightStyle(category: string, style: Partial<CategoryStyle>): void;
-
-  getHighlightsForPage(pageNumber: number): TermOccurrence[];
+  updateHighlightStyle(termId: string, style: Partial<HighlightStyle>): void;
 
   textSelection: {
     enable(): void;
@@ -54,24 +50,16 @@ export interface PDFHighlightViewer {
 
     copySelection(format?: 'plain' | 'formatted' | 'citation'): void;
 
-    createHighlightFromSelection(category: string): TermOccurrence | null;
+    createHighlightFromSelection(style?: HighlightStyle): InputHighlightData | null;
   };
 
   goToHighlight(termId: string, occurrenceIndex?: number): void;
 
-  nextHighlight(category?: string): void;
+  nextHighlight(): void;
 
-  previousHighlight(category?: string): void;
+  previousHighlight(): void;
 
   goToCoordinate(pageNumber: number, x: number, y: number): void;
-
-  searchTerms(query: string): TermMetadata[];
-
-  filterByCategory(categories: string[]): void;
-
-  highlightSearchResults(query: string): void;
-
-  clearSearchResults(): void;
 
   setInteractionMode(mode: InteractionMode): void;
 

@@ -1,25 +1,22 @@
 import { PDFHighlightViewer as IPDFHighlightViewer } from './api';
 import {
   ViewerOptions,
-  HighlightData,
-  TermOccurrence,
-  CategoryStyle,
   TextRange,
   SelectionWithMetadata,
   PerformanceMetrics,
   HighlightAnalytics,
   AccessibilityFeatures,
   InteractionMode,
-  TermMetadata,
   InputHighlightData,
+  HighlightsIndex,
+  HighlightStyle,
 } from './types';
 import { PDFEngine } from './core/pdf-engine';
 import { ViewportManager } from './core/viewport-manager';
 import { UnifiedLayerBuilder } from './core/unified-layer-builder';
 import { UnifiedInteractionHandler, InteractionCallbacks } from './core/interaction-handler';
 import { PerformanceOptimizer } from './core/performance-optimizer';
-import { CategoryStyleManager } from './core/style-manager';
-import { adaptHighlightData } from './utils/highlight-adapter';
+import { buildHighlightsIndex } from './utils/highlight-adapter';
 
 export class PDFHighlightViewer implements IPDFHighlightViewer {
   private pdfEngine: PDFEngine;
@@ -27,19 +24,25 @@ export class PDFHighlightViewer implements IPDFHighlightViewer {
   private layerBuilder: UnifiedLayerBuilder;
   private interactionHandler: UnifiedInteractionHandler;
   private performanceOptimizer: PerformanceOptimizer;
-  private styleManager: CategoryStyleManager;
 
   private container: HTMLElement | null = null;
   private pdfContainer: HTMLElement | null = null;
   private pageContainers = new Map<number, HTMLElement>();
 
   private options: ViewerOptions;
-  private highlightData: HighlightData = {};
+  private highlightsIndex: HighlightsIndex = {
+    highlights: [],
+    byId: new Map(),
+    pages: {},
+    occurrences: [],
+  };
   private currentPage = 1;
   private currentScale = 1.5;
   private totalPages = 0;
   private selectedTermId: string | null = null;
   private isInitialized = false;
+
+  private navIndex = -1;
 
   private pageDimensions = new Map<number, { width: number; height: number }>();
   private defaultPageHeight = 800;
@@ -48,7 +51,6 @@ export class PDFHighlightViewer implements IPDFHighlightViewer {
   private scrollListener: (() => void) | null = null;
   private analytics: HighlightAnalytics = {
     totalHighlights: 0,
-    categoryBreakdown: {},
     mostViewedPages: [],
     interactionHeatmap: {},
     averageTimePerPage: 0,
@@ -74,7 +76,6 @@ export class PDFHighlightViewer implements IPDFHighlightViewer {
       maxCacheSize: this.options.maxCachedPages ? this.options.maxCachedPages * 10 : 100,
       frameBudget: this.options.performanceMode ? 8 : 16,
     });
-    this.styleManager = new CategoryStyleManager();
 
     // Setup interaction callbacks
     const interactionCallbacks: InteractionCallbacks = {
@@ -219,31 +220,6 @@ export class PDFHighlightViewer implements IPDFHighlightViewer {
         opacity: 0.3;
       }
       
-      /* Category-specific highlight colors */
-      .protein-highlight .highlight-background {
-        background-color: #ff6b6b;
-      }
-      
-      .species-highlight .highlight-background {
-        background-color: #4ecdc4;
-      }
-      
-      .chemical-highlight .highlight-background {
-        background-color: #45b7d1;
-      }
-      
-      .disease-highlight .highlight-background {
-        background-color: #f7b731;
-      }
-      
-      .gene-highlight .highlight-background {
-        background-color: #5f27cd;
-      }
-      
-      .cell_line-highlight .highlight-background {
-        background-color: #00d2d3;
-      }
-      
       /* Text segment styling */
       .text-segment {
         position: relative;
@@ -309,6 +285,12 @@ export class PDFHighlightViewer implements IPDFHighlightViewer {
     };
 
     this.container.addEventListener('scroll', this.scrollListener);
+  }
+
+  private getPageScrollTop(pageNumber: number): number {
+    const el = this.pageContainers.get(pageNumber);
+    if (el) return el.offsetTop;
+    return this.viewportManager.getScrollPositionForPage(pageNumber);
   }
 
   /**
@@ -492,6 +474,10 @@ export class PDFHighlightViewer implements IPDFHighlightViewer {
       // Load initial pages
       await this.loadInitialPages();
 
+      if (this.options.enableVirtualScrolling === false) {
+        await this.renderAllPagesBatched(2);
+      }
+
       this.emit('pdfLoaded', { totalPages: this.totalPages });
     } catch (error) {
       this.emit('error', { type: 'pdf-load-error', error });
@@ -571,6 +557,26 @@ export class PDFHighlightViewer implements IPDFHighlightViewer {
     }, 100);
   }
 
+  private async renderAllPagesBatched(batchSize = 2): Promise<void> {
+    for (let i = 1; i <= this.totalPages; i += batchSize) {
+      const batch: Promise<void>[] = [];
+
+      for (let j = i; j < i + batchSize && j <= this.totalPages; j++) {
+        const pageContainer = this.pageContainers.get(j);
+        if (pageContainer && !pageContainer.classList.contains('rendered')) {
+          batch.push(
+            this.renderPage(j).catch((error) => {
+              console.debug(`Failed to render page ${j}:`, error);
+            })
+          );
+        }
+      }
+
+      await Promise.all(batch);
+      await new Promise((r) => setTimeout(r, 0));
+    }
+  }
+
   /**
    * Render a specific page
    */
@@ -631,9 +637,8 @@ export class PDFHighlightViewer implements IPDFHighlightViewer {
   setPage(pageNumber: number): void {
     if (pageNumber < 1 || pageNumber > this.totalPages) return;
 
-    const pagePosition = this.viewportManager.getScrollPositionForPage(pageNumber);
     if (this.container) {
-      this.container.scrollTop = pagePosition;
+      this.container.scrollTop = this.getPageScrollTop(pageNumber);
     }
   }
 
@@ -736,95 +741,108 @@ export class PDFHighlightViewer implements IPDFHighlightViewer {
   // Highlight Management
   // =============================================================================
 
-  loadHighlights(data: HighlightData | InputHighlightData[]): void {
-    if (Array.isArray(data)) {
-      this.highlightData = adaptHighlightData(data, {
-        categoryResolver: (highlight) => highlight.metadata?.category || 'default',
-        termNameResolver: (highlight) => highlight.metadata?.term || highlight.id,
-      });
-    } else {
-      this.highlightData = data;
-    }
+  loadHighlights(data: InputHighlightData[]): void {
+    this.highlightsIndex = buildHighlightsIndex(data);
+    this.navIndex = -1;
 
     this.updateAnalytics();
 
-    // Update unified layers for all rendered pages
+    // refresh rendered pages
     this.updateAllUnifiedLayers();
 
-    // Update spatial indices
     this.buildAllSpatialIndices();
 
-    this.emit('highlightsLoaded', { data: this.highlightData });
+    this.emit('highlightsLoaded', { count: data.length });
   }
 
-  addHighlight(pageNumber: number, highlight: TermOccurrence): void {
-    // Add to first available category or create 'custom' category
-    const categoryKey = Object.keys(this.highlightData)[0] || 'custom';
+  addHighlight(highlight: InputHighlightData): void {
+    const prev = this.highlightsIndex.byId.get(highlight.id);
 
-    if (!this.highlightData[categoryKey]) {
-      this.highlightData[categoryKey] = { pages: {}, terms: {} };
-    }
+    const affectedPages = new Set<number>();
+    prev?.bboxes?.forEach((b) => affectedPages.add(b.page));
+    highlight.bboxes.forEach((b) => affectedPages.add(b.page));
 
-    if (!this.highlightData[categoryKey].pages[pageNumber.toString()]) {
-      this.highlightData[categoryKey].pages[pageNumber.toString()] = [];
-    }
+    const nextList = [...this.highlightsIndex.highlights];
+    const idx = nextList.findIndex((h) => h.id === highlight.id);
 
-    this.highlightData[categoryKey].pages[pageNumber.toString()].push(highlight);
+    if (idx >= 0) nextList[idx] = highlight;
+    else nextList.push(highlight);
 
-    // Update page if rendered
-    this.updatePageUnifiedLayer(pageNumber);
-    this.buildSpatialIndexForPage(pageNumber);
+    this.highlightsIndex = buildHighlightsIndex(nextList);
+    this.navIndex = -1;
 
     this.updateAnalytics();
-    this.emit('highlightAdded', { pageNumber, highlight });
+
+    // Refresh only affected pages
+    for (const pageNumber of affectedPages) {
+      this.refreshHighlightLayerForPage(pageNumber);
+      this.updatePageUnifiedLayer(pageNumber);
+      this.buildSpatialIndexForPage(pageNumber);
+    }
+
+    this.emit('highlightAdded', { highlight, pages: Array.from(affectedPages) });
   }
 
   removeHighlight(termId: string): void {
-    let found = false;
+    const prev = this.highlightsIndex.byId.get(termId);
+    if (!prev) return;
 
-    // Remove from all categories
-    Object.keys(this.highlightData).forEach((category) => {
-      Object.keys(this.highlightData[category].pages).forEach((pageNumber) => {
-        const page = this.highlightData[category].pages[pageNumber];
-        const initialLength = page.length;
+    const affectedPages = new Set<number>();
+    prev.bboxes.forEach((b) => affectedPages.add(b.page));
 
-        this.highlightData[category].pages[pageNumber] = page.filter(
-          (highlight) => highlight.termId !== termId
-        );
+    const nextList = this.highlightsIndex.highlights.filter((h) => h.id !== termId);
+    this.highlightsIndex = buildHighlightsIndex(nextList);
+    this.navIndex = -1;
 
-        if (page.length !== initialLength) {
-          found = true;
-          this.updatePageUnifiedLayer(parseInt(pageNumber));
-          this.buildSpatialIndexForPage(parseInt(pageNumber));
-        }
-      });
-
-      // Remove from terms
-      delete this.highlightData[category].terms[termId];
-    });
-
-    if (found) {
-      this.updateAnalytics();
-      this.emit('highlightRemoved', { termId });
+    // If removed highlight was selected — clear selection visuals
+    if (this.selectedTermId === termId) {
+      this.selectedTermId = null;
+      this.clearSelectedTermHighlighting();
     }
+
+    this.updateAnalytics();
+
+    for (const pageNumber of affectedPages) {
+      this.refreshHighlightLayerForPage(pageNumber);
+      this.updatePageUnifiedLayer(pageNumber);
+      this.buildSpatialIndexForPage(pageNumber);
+    }
+
+    this.emit('highlightRemoved', { termId, pages: Array.from(affectedPages) });
   }
 
-  updateHighlightStyle(category: string, style: Partial<CategoryStyle>): void {
-    this.styleManager.updateCategoryStyle(category, style);
-    this.emit('styleUpdated', { category, style });
-  }
+  updateHighlightStyle(termId: string, stylePatch: Partial<HighlightStyle>): void {
+    const prev = this.highlightsIndex.byId.get(termId);
+    if (!prev) return;
 
-  getHighlightsForPage(pageNumber: number): TermOccurrence[] {
-    const highlights: TermOccurrence[] = [];
+    const next: InputHighlightData = {
+      ...prev,
+      style: {
+        ...(prev.style ?? {}),
+        ...stylePatch,
+      } as HighlightStyle,
+    };
 
-    Object.values(this.highlightData).forEach((categoryData) => {
-      const pageHighlights = categoryData.pages[pageNumber.toString()];
-      if (pageHighlights) {
-        highlights.push(...pageHighlights);
-      }
-    });
+    const affectedPages = new Set<number>();
+    prev.bboxes.forEach((b) => affectedPages.add(b.page));
 
-    return highlights;
+    const nextList = [...this.highlightsIndex.highlights];
+    const idx = nextList.findIndex((h) => h.id === termId);
+    if (idx >= 0) nextList[idx] = next;
+
+    this.highlightsIndex = buildHighlightsIndex(nextList);
+
+    this.navIndex = -1;
+
+    this.updateAnalytics();
+
+    for (const pageNumber of affectedPages) {
+      this.refreshHighlightLayerForPage(pageNumber);
+      this.updatePageUnifiedLayer(pageNumber);
+      this.buildSpatialIndexForPage(pageNumber);
+    }
+
+    this.emit('styleUpdated', { termId, style: next.style, patch: stylePatch });
   }
 
   /**
@@ -835,11 +853,16 @@ export class PDFHighlightViewer implements IPDFHighlightViewer {
     if (!pageContainer) return;
 
     const pageData = this.pdfEngine.getPageData(pageNumber);
-    if (!pageData || !pageData.textContent) return;
+    if (!pageData?.textContent) return;
 
-    this.layerBuilder.updateHighlights(this.highlightData, pageNumber, pageData.textContent);
+    this.layerBuilder.updateHighlights(
+      pageContainer,
+      this.highlightsIndex.highlights,
+      pageNumber,
+      pageData.textContent,
+      this.currentScale
+    );
   }
-
   /**
    * Update all unified layers
    */
@@ -892,7 +915,7 @@ export class PDFHighlightViewer implements IPDFHighlightViewer {
         // Track for average calculation
         totalHeight += newDimensions.height;
         validDimensions++;
-      } catch (_error) {
+      } catch {
         pageContainer.style.height = `${this.defaultPageHeight}px`;
       }
     }
@@ -958,24 +981,28 @@ export class PDFHighlightViewer implements IPDFHighlightViewer {
       }
     },
 
-    createHighlightFromSelection: (category: string): TermOccurrence | null => {
+    createHighlightFromSelection: (style?: HighlightStyle): InputHighlightData | null => {
       const selectionData = this.textSelection.getSelectionWithContext();
       if (!selectionData) return null;
 
-      // Create new term occurrence from selection
-      const termId = `selection-${Date.now()}`;
-      const occurrence: TermOccurrence = {
-        termId,
-        coordinates: [], // TODO: Calculate coordinates from selection
+      const id = `selection-${Date.now()}`;
+
+      const highlight: InputHighlightData = {
+        id,
+        bboxes: [], // still TODO: compute bboxes from selection
+        style,
+        tooltipText: selectionData.text,
+        metadata: {
+          pages: selectionData.pages,
+          context: selectionData.context,
+          range: selectionData.range,
+        },
       };
 
-      // Add to highlights
-      selectionData.pages.forEach((pageNumber) => {
-        this.addHighlight(pageNumber, occurrence);
-      });
+      this.addHighlight(highlight);
 
-      this.emit('selectionHighlighted', { text: selectionData.text, category, coordinates: [] });
-      return occurrence;
+      this.emit('selectionHighlighted', { text: selectionData.text, termId: id });
+      return highlight;
     },
   };
 
@@ -983,36 +1010,93 @@ export class PDFHighlightViewer implements IPDFHighlightViewer {
   // Navigation
   // =============================================================================
 
-  goToHighlight(termId: string, occurrenceIndex = 0): void {
-    // Find highlight location
-    for (const [, categoryData] of Object.entries(this.highlightData)) {
-      for (const [pageNumber, highlights] of Object.entries(categoryData.pages)) {
-        const highlight = highlights.find((h) => h.termId === termId);
-        if (highlight && highlight.coordinates[occurrenceIndex]) {
-          const page = parseInt(pageNumber);
-          this.setPage(page);
+  private getNavOccurrences(): {
+    termId: string;
+    pageNumber: number;
+    occurrenceIndex: number;
+    x1: number;
+    y1: number;
+  }[] {
+    const list: {
+      termId: string;
+      pageNumber: number;
+      occurrenceIndex: number;
+      x1: number;
+      y1: number;
+    }[] = [];
 
-          // TODO: Scroll to specific coordinates within page
+    for (const h of this.highlightsIndex.highlights) {
+      for (let i = 0; i < h.bboxes.length; i++) {
+        const b = h.bboxes[i];
+        list.push({ termId: h.id, pageNumber: b.page, occurrenceIndex: i, x1: b.x1, y1: b.y1 });
+      }
+    }
+
+    list.sort((a, b) => a.pageNumber - b.pageNumber || a.y1 - b.y1 || a.x1 - b.x1);
+    return list;
+  }
+
+  goToHighlight(termId: string, occurrenceIndex = 0): void {
+    const highlight = this.getHighlightById(termId);
+    if (!highlight) return;
+
+    const bbox = highlight.bboxes[occurrenceIndex];
+    if (!bbox) return;
+
+    const page = bbox.page;
+
+    this.highlightSelectedTerm(termId);
+
+    this.setPage(page);
+
+    void this.renderPage(page)
+      .then(() => {
+        const pageContainer = this.pageContainers.get(page);
+        if (!pageContainer || !this.container) {
           this.emit('navigationComplete', { termId, pageNumber: page, occurrenceIndex });
           return;
         }
-      }
-    }
+
+        const pageTop = pageContainer.offsetTop;
+        const y = bbox.y1 * this.currentScale;
+        this.container.scrollTop = Math.max(0, pageTop + y - 60);
+
+        this.emit('navigationComplete', { termId, pageNumber: page, occurrenceIndex });
+      })
+      .catch((error) => {
+        console.error('goToHighlight render/scroll failed:', error);
+        this.emit('navigationError', { termId, pageNumber: page, occurrenceIndex, error });
+      });
   }
 
-  nextHighlight(category?: string): void {
-    // TODO: Implement next highlight navigation
-    console.log('nextHighlight not yet implemented:', category);
+  nextHighlight(): void {
+    const list = this.getNavOccurrences();
+    if (list.length === 0) return;
+
+    this.navIndex = (this.navIndex + 1) % list.length;
+    const next = list[this.navIndex];
+    this.goToHighlight(next.termId, next.occurrenceIndex);
   }
 
-  previousHighlight(category?: string): void {
-    // TODO: Implement previous highlight navigation
-    console.log('previousHighlight not yet implemented:', category);
+  previousHighlight(): void {
+    const list = this.getNavOccurrences();
+    if (list.length === 0) return;
+
+    this.navIndex = (this.navIndex - 1 + list.length) % list.length;
+    const prev = list[this.navIndex];
+    this.goToHighlight(prev.termId, prev.occurrenceIndex);
   }
 
   goToCoordinate(pageNumber: number, x: number, y: number): void {
     this.setPage(pageNumber);
-    // TODO: Scroll to specific coordinates
+
+    if (!this.container) return;
+
+    const pageTop = this.getPageScrollTop(pageNumber);
+    const targetY = pageTop + y * this.currentScale - this.container.clientHeight * 0.3;
+
+    this.container.scrollTop = Math.max(0, targetY);
+
     this.emit('coordinateNavigation', { pageNumber, x, y });
   }
 
@@ -1020,36 +1104,24 @@ export class PDFHighlightViewer implements IPDFHighlightViewer {
   // Search & Filter
   // =============================================================================
 
-  searchTerms(query: string): TermMetadata[] {
-    const results: TermMetadata[] = [];
+  searchHighlights(query: string): InputHighlightData[] {
+    const q = query.trim().toLowerCase();
+    if (!q) return [];
 
-    Object.values(this.highlightData).forEach((categoryData) => {
-      Object.values(categoryData.terms).forEach((term) => {
-        if (
-          term.term.toLowerCase().includes(query.toLowerCase()) ||
-          term.aliases.some((alias) => alias.toLowerCase().includes(query.toLowerCase()))
-        ) {
-          results.push(term);
+    return this.highlightsIndex.highlights.filter((h) => {
+      if (h.id.toLowerCase().includes(q)) return true;
+      if ((h.tooltipText ?? '').toLowerCase().includes(q)) return true;
+
+      if (h.metadata) {
+        try {
+          return JSON.stringify(h.metadata).toLowerCase().includes(q);
+        } catch {
+          // ignore non-serializable metadata
         }
-      });
+      }
+
+      return false;
     });
-
-    return results;
-  }
-
-  filterByCategory(categories: string[]): void {
-    // TODO: Implement category filtering
-    console.log('filterByCategory not yet implemented:', categories);
-  }
-
-  highlightSearchResults(query: string): void {
-    // TODO: Implement search result highlighting
-    console.log('highlightSearchResults not yet implemented:', query);
-  }
-
-  clearSearchResults(): void {
-    // TODO: Implement search result clearing
-    console.log('clearSearchResults not yet implemented');
   }
 
   // =============================================================================
@@ -1071,24 +1143,22 @@ export class PDFHighlightViewer implements IPDFHighlightViewer {
   getPerformanceMetrics(): PerformanceMetrics {
     const baseMetrics = this.performanceOptimizer.getPerformanceMetrics();
 
-    // Add memory usage info
-    const renderedPages = Array.from(this.pageContainers.entries()).filter(([_, container]) =>
+    const renderedPages = Array.from(this.pageContainers.values()).filter((container) =>
       container.classList.contains('rendered')
     ).length;
 
-    const memoryEstimate = renderedPages * 2; // ~2MB per rendered page
+    const memoryEstimate = renderedPages * 2; // ~2MB per rendered page (rough estimate)
 
     return {
       ...baseMetrics,
       memoryUsage: {
         pages: renderedPages,
-        highlights: Object.keys(this.highlightData).length,
+        highlights: this.highlightsIndex.highlights.length,
         cache: this.pageDimensions.size,
         total: memoryEstimate,
       },
     };
   }
-
   /**
    * Get current memory and performance stats
    */
@@ -1245,6 +1315,19 @@ export class PDFHighlightViewer implements IPDFHighlightViewer {
   // Private Helper Methods
   // =============================================================================
 
+  private refreshHighlightLayerForPage(pageNumber: number): void {
+    const pageContainer = this.pageContainers.get(pageNumber);
+    if (!pageContainer || !pageContainer.classList.contains('rendered')) return;
+
+    const existingHighlightLayer = pageContainer.querySelector('.highlight-layer');
+    if (existingHighlightLayer) existingHighlightLayer.remove();
+
+    const canvas = pageContainer.querySelector('canvas') as HTMLCanvasElement | null;
+    if (!canvas) return;
+
+    this.addHighlightsToPage(pageNumber, canvas.width, canvas.height);
+  }
+
   /**
    * Add highlights to a rendered page
    */
@@ -1261,13 +1344,9 @@ export class PDFHighlightViewer implements IPDFHighlightViewer {
       return;
     }
 
-    // Get the actual PDF page to get proper dimensions
     try {
-      // Simple approach - just scale coordinates by the current zoom level
-      // The coordinates in the JSON appear to be at scale 1.0
       const scale = this.currentScale;
 
-      // Create highlight layer
       const highlightLayer = document.createElement('div');
       highlightLayer.className = 'highlight-layer';
       highlightLayer.style.position = 'absolute';
@@ -1275,96 +1354,93 @@ export class PDFHighlightViewer implements IPDFHighlightViewer {
       highlightLayer.style.left = '0';
       highlightLayer.style.width = `${canvasWidth}px`;
       highlightLayer.style.height = `${canvasHeight}px`;
-      highlightLayer.style.zIndex = '2'; // Above text layer
+      highlightLayer.style.zIndex = '2';
       highlightLayer.style.pointerEvents = 'none';
 
-      // Add highlights from each category
-      Object.entries(this.highlightData).forEach(([category, categoryData]) => {
-        const pageHighlights = categoryData.pages[pageNumber.toString()];
-        if (!pageHighlights) return;
+      for (const highlight of this.highlightsIndex.highlights) {
+        const style = highlight.style;
+        const backgroundColor = style?.backgroundColor ?? '#666666';
+        const borderColor = style?.borderColor ?? backgroundColor;
+        const borderWidth = style?.borderWidth ?? '1px';
 
-        pageHighlights.forEach((highlight) => {
-          if (highlight.coordinates && highlight.coordinates.length > 0) {
-            highlight.coordinates.forEach((coord) => {
-              const highlightDiv = document.createElement('div');
-              highlightDiv.className = `highlight ${category}-highlight`;
-              highlightDiv.setAttribute('data-term-id', highlight.termId);
-              highlightDiv.setAttribute('data-category', category);
+        for (let bboxIndex = 0; bboxIndex < highlight.bboxes.length; bboxIndex++) {
+          const bbox = highlight.bboxes[bboxIndex];
+          if (bbox.page !== pageNumber) continue;
 
-              // Scale coordinates by current zoom level
-              const left = coord.x1 * scale;
-              const top = coord.y1 * scale;
-              const width = (coord.x2 - coord.x1) * scale;
-              const height = (coord.y2 - coord.y1) * scale;
+          const highlightDiv = document.createElement('div');
+          highlightDiv.className = 'highlight';
+          highlightDiv.setAttribute('data-term-id', highlight.id);
+          highlightDiv.setAttribute('data-page', String(pageNumber));
+          highlightDiv.setAttribute('data-bbox-index', String(bboxIndex));
 
-              highlightDiv.style.position = 'absolute';
-              highlightDiv.style.left = `${left}px`;
-              highlightDiv.style.top = `${top}px`;
-              highlightDiv.style.width = `${width}px`;
-              highlightDiv.style.height = `${height}px`;
-              highlightDiv.style.backgroundColor = this.getHighlightColor(
-                highlight.termId,
-                category
+          const left = bbox.x1 * scale;
+          const top = bbox.y1 * scale;
+          const width = (bbox.x2 - bbox.x1) * scale;
+          const height = (bbox.y2 - bbox.y1) * scale;
+
+          highlightDiv.style.position = 'absolute';
+          highlightDiv.style.left = `${left}px`;
+          highlightDiv.style.top = `${top}px`;
+          highlightDiv.style.width = `${width}px`;
+          highlightDiv.style.height = `${height}px`;
+
+          highlightDiv.style.backgroundColor = backgroundColor;
+          highlightDiv.style.border = `${borderWidth} solid ${borderColor}`;
+
+          highlightDiv.style.pointerEvents = 'auto';
+          highlightDiv.style.cursor = 'pointer';
+          highlightDiv.style.boxSizing = 'border-box';
+          highlightDiv.style.userSelect = 'none';
+          highlightDiv.style.mixBlendMode = 'multiply';
+
+          const baseOpacity = typeof style?.opacity === 'number' ? style.opacity : 0.3;
+
+          const overlappingCount = this.countOverlappingHighlights(highlightLayer, bbox, scale);
+          const effectiveOpacity = Math.max(
+            0.05,
+            baseOpacity / Math.max(1, overlappingCount * 0.7)
+          );
+
+          highlightDiv.style.opacity = effectiveOpacity.toString();
+          highlightDiv.dataset.originalOpacity = effectiveOpacity.toString();
+
+          const hoverOpacity =
+            typeof style?.hoverOpacity === 'number'
+              ? style.hoverOpacity
+              : Math.min(0.6, effectiveOpacity + 0.2);
+
+          highlightDiv.addEventListener('mouseenter', () => {
+            if (this.options.highlightsConfig?.enableMultilineHover) {
+              const same = highlightLayer.querySelectorAll(`[data-term-id="${highlight.id}"]`);
+              same.forEach((el) => ((el as HTMLDivElement).style.opacity = String(hoverOpacity)));
+
+              const other = highlightLayer.querySelectorAll(
+                `div[data-term-id]:not([data-term-id="${highlight.id}"])`
               );
-              highlightDiv.style.border = `1px solid ${this.getHighlightColor(highlight.termId, category)}`;
-              highlightDiv.style.pointerEvents = 'auto';
-              highlightDiv.style.cursor = 'pointer';
-              highlightDiv.style.boxSizing = 'border-box';
-              highlightDiv.style.userSelect = 'none'; // Prevent highlight div from being selected
-              highlightDiv.style.mixBlendMode = 'multiply'; // Better color blending
+              other.forEach((el) => ((el as HTMLDivElement).style.opacity = '0.1'));
+            } else {
+              highlightDiv.style.opacity = String(hoverOpacity);
+            }
+          });
 
-              // Check for overlapping highlights and adjust opacity
-              const overlappingCount = this.countOverlappingHighlights(
-                highlightLayer,
-                coord,
-                scale
-              );
-              const baseOpacity = Math.max(0.15, 0.3 / Math.max(1, overlappingCount * 0.7));
-              highlightDiv.style.opacity = baseOpacity.toString();
-
-              // todo make hover opacities configurable?
-              // Add hover effect with dynamic opacity
-              const originalOpacity = baseOpacity.toString();
-              const hoverOpacity = Math.min(0.6, baseOpacity + 0.2).toString();
-
-              highlightDiv.addEventListener('mouseenter', () => {
-                if (this.options.highlightsConfig?.enableMultilineHover) {
-                  const highlightBoxes = highlightLayer.querySelectorAll(
-                    `[data-term-id="${highlight.termId}"]`
-                  );
-                  highlightBoxes.forEach((highlightBox) => {
-                    (highlightBox as HTMLDivElement).style.opacity = hoverOpacity;
-                  });
-                  const unhoveredBoxes = highlightLayer.querySelectorAll(
-                    `div[data-term-id]:not([data-term-id="${highlight.termId}"])`
-                  );
-                  unhoveredBoxes.forEach((highlightBox) => {
-                    (highlightBox as HTMLDivElement).style.opacity = '0.1';
-                  });
-                } else {
-                  highlightDiv.style.opacity = hoverOpacity;
-                }
+          highlightDiv.addEventListener('mouseleave', () => {
+            if (this.options.highlightsConfig?.enableMultilineHover) {
+              const all = highlightLayer.querySelectorAll(`div[data-term-id]`);
+              all.forEach((el) => {
+                const original = (el as HTMLDivElement).dataset.originalOpacity ?? '0.3';
+                (el as HTMLDivElement).style.opacity = original;
               });
-              highlightDiv.addEventListener('mouseleave', () => {
-                if (this.options.highlightsConfig?.enableMultilineHover) {
-                  const allBoxes = highlightLayer.querySelectorAll(`div[data-term-id]`);
-                  allBoxes.forEach((highlightBox) => {
-                    (highlightBox as HTMLDivElement).style.opacity = originalOpacity;
-                  });
-                } else {
-                  highlightDiv.style.opacity = originalOpacity;
-                }
-              });
+            } else {
+              highlightDiv.style.opacity = highlightDiv.dataset.originalOpacity ?? '0.3';
+            }
+          });
 
-              highlightLayer.appendChild(highlightDiv);
-            });
-          }
-        });
-      });
+          highlightLayer.appendChild(highlightDiv);
+        }
+      }
 
       pageContainer.appendChild(highlightLayer);
 
-      // Apply selected term highlighting if there's a selected term
       if (this.selectedTermId) {
         this.applySelectionToPage(pageNumber);
       }
@@ -1373,90 +1449,77 @@ export class PDFHighlightViewer implements IPDFHighlightViewer {
     }
   }
 
+  private getHighlightById(termId: string): InputHighlightData | undefined {
+    const byId = this.highlightsIndex?.byId;
+    if (byId && typeof byId.get === 'function') {
+      const fromMap = byId.get(termId) as InputHighlightData | undefined;
+      if (fromMap) return fromMap;
+    }
+
+    return this.highlightsIndex.highlights.find((h) => h.id === termId);
+  }
+
+  private getHighlightStyle(termId: string): HighlightStyle | undefined {
+    return this.getHighlightById(termId)?.style;
+  }
   /**
    * Update highlights colors for specified page
    * */
   updateHighlightsStyles(pageNumber: number, hoveredIds?: string[]) {
     const pageContainer = this.pageContainers.get(pageNumber);
-    if (!pageContainer) {
-      return;
-    }
+    if (!pageContainer) return;
 
-    const highlightLayer = pageContainer.querySelector('.highlight-layer') as HTMLDivElement;
-    if (!highlightLayer) {
-      return;
-    }
+    const highlightLayer = pageContainer.querySelector('.highlight-layer');
+    if (!highlightLayer) return;
 
-    // Find all highlights in this page
-    const allHighlights = pageContainer.querySelectorAll('.highlight, .highlight-wrapper');
-    allHighlights.forEach((highlight) => {
-      const elementTermId = highlight.getAttribute('data-term-id');
-      const category = highlight.getAttribute('data-category');
+    const allHighlights = pageContainer.querySelectorAll<HTMLDivElement>(
+      '.highlight, .highlight-wrapper'
+    );
+    allHighlights.forEach((el) => {
+      const termId = el.getAttribute('data-term-id');
+      if (!termId) return;
 
-      if (elementTermId && category) {
-        (highlight as HTMLDivElement).style.backgroundColor = this.getHighlightColor(
-          elementTermId,
-          category
-        );
-        (highlight as HTMLDivElement).style.border =
-          `1px solid ${this.getHighlightColor(elementTermId, category)}`;
+      const style = this.getHighlightStyle(termId);
+      const bg = style?.backgroundColor ?? el.style.backgroundColor ?? '#666666';
+      const borderColor = style?.borderColor ?? bg;
+      const borderWidth = style?.borderWidth ?? '1px';
 
-        if (
-          this.options.highlightsConfig?.enableMultilineHover &&
-          hoveredIds &&
-          Array.isArray(hoveredIds)
-        ) {
-          const baseOpacity = 0.3;
-          const originalOpacity = baseOpacity.toString();
-          const hoverOpacity = Math.min(0.6, baseOpacity + 0.2).toString();
-          const unhoveredOpacity = '0.1';
+      el.style.backgroundColor = bg;
+      el.style.border = `${borderWidth} solid ${borderColor}`;
 
-          if (hoveredIds.includes(elementTermId)) {
-            (highlight as HTMLDivElement).style.opacity = hoverOpacity;
-          } else if (hoveredIds.length > 0) {
-            (highlight as HTMLDivElement).style.opacity = unhoveredOpacity;
-          } else {
-            (highlight as HTMLDivElement).style.opacity = originalOpacity;
-          }
+      if (
+        this.options.highlightsConfig?.enableMultilineHover &&
+        hoveredIds &&
+        Array.isArray(hoveredIds)
+      ) {
+        const baseOpacity =
+          typeof style?.opacity === 'number'
+            ? style.opacity
+            : parseFloat(el.dataset.originalOpacity ?? '0.3');
+
+        const hoverOpacity =
+          typeof style?.hoverOpacity === 'number'
+            ? style.hoverOpacity
+            : Math.min(0.6, baseOpacity + 0.2);
+
+        if (hoveredIds.includes(termId)) {
+          el.style.opacity = String(hoverOpacity);
+        } else if (hoveredIds.length > 0) {
+          el.style.opacity = '0.1';
+        } else {
+          el.style.opacity = String(baseOpacity);
         }
       }
     });
   }
 
   /**
-   * Get highlight color
-   */
-  private getHighlightColor(termId: string, category: string): string {
-    if (this.options.highlightsConfig && this.options.highlightsConfig.getHighlightColor) {
-      return this.options.highlightsConfig.getHighlightColor(termId);
-    }
-
-    return this.getCategoryColor(category);
-  }
-
-  /**
-   * Get color for highlight category
-   */
-  private getCategoryColor(category: string): string {
-    const colors: Record<string, string> = {
-      protein: '#ff6b6b',
-      species: '#4ecdc4',
-      chemical: '#45b7d1',
-      disease: '#f7b731',
-      gene: '#5f27cd',
-      cell_line: '#00d2d3',
-    };
-    return colors[category] || '#666666';
-  }
-
-  /**
    * Build spatial index for a specific page
    */
   private buildSpatialIndexForPage(pageNumber: number): void {
-    const highlights = this.getHighlightsForPage(pageNumber);
-    this.performanceOptimizer.buildSpatialIndex(highlights, pageNumber);
+    const refs = this.highlightsIndex.pages[String(pageNumber)] ?? [];
+    this.performanceOptimizer.buildSpatialIndex(refs, pageNumber);
   }
-
   /**
    * Build spatial indices for all pages
    */
@@ -1467,32 +1530,35 @@ export class PDFHighlightViewer implements IPDFHighlightViewer {
   }
 
   /**
-   * Get highlight count for a page
+   * Get the number of highlights on a given page.
+   *
+   * This reads from the precomputed `highlightsIndex.pages` map, which stores
+   * arrays of highlight references keyed by the page number as a string.
+   * If there are no references for the requested page, an empty array is used,
+   * and the method returns 0.
+   *
+   * @param pageNumber - The 1-based page number to count highlights for.
+   * @returns The total number of highlight references on the page.
    */
   private getHighlightCountForPage(pageNumber: number): number {
-    return this.getHighlightsForPage(pageNumber).length;
+    const refs = this.highlightsIndex.pages[String(pageNumber)] ?? [];
+    return refs.length;
   }
 
   /**
-   * Update analytics data
+   * Update analytics information based on the current highlights index.
+   *
+   * This method recalculates the total number of highlights by reading the
+   * length of `this.highlightsIndex.highlights` and updates the
+   * `this.analytics` object with the new `totalHighlights` value, while
+   * preserving all other existing analytics properties.
    */
   private updateAnalytics(): void {
-    let totalHighlights = 0;
-    const categoryBreakdown: Record<string, number> = {};
-
-    Object.entries(this.highlightData).forEach(([category, categoryData]) => {
-      let categoryCount = 0;
-      Object.values(categoryData.pages).forEach((highlights) => {
-        categoryCount += highlights.length;
-      });
-      categoryBreakdown[category] = categoryCount;
-      totalHighlights += categoryCount;
-    });
+    const totalHighlights = this.highlightsIndex.highlights.length;
 
     this.analytics = {
       ...this.analytics,
       totalHighlights,
-      categoryBreakdown,
     };
   }
 
@@ -1834,7 +1900,6 @@ export class PDFHighlightViewer implements IPDFHighlightViewer {
     this.pdfEngine.destroy();
     this.interactionHandler.destroy();
     this.performanceOptimizer.destroy();
-    this.styleManager.destroy();
 
     // Clear DOM references
     this.container = null;
@@ -1843,7 +1908,6 @@ export class PDFHighlightViewer implements IPDFHighlightViewer {
 
     // Clear state
     this.eventListeners = [];
-    this.highlightData = {};
     this.isInitialized = false;
 
     this.emit('destroyed');

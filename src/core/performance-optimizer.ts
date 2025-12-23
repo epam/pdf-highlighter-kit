@@ -1,9 +1,10 @@
 import {
   MemoryMetrics,
   BoundingBox,
-  TermOccurrence,
+  PageBBoxRef,
   HeavyTask,
   PerformanceMetrics,
+  SpatialHit,
 } from '../types';
 
 export interface SpatialIndex {
@@ -525,21 +526,20 @@ export class PerformanceOptimizer {
     this.startPerformanceMonitoring();
   }
 
-  buildSpatialIndex(highlights: TermOccurrence[], pageNumber: number): void {
+  buildSpatialIndex(occurrences: PageBBoxRef[], pageNumber: number): void {
     this.spatialIndex.clear();
 
-    highlights.forEach((highlight) => {
-      highlight.coordinates.forEach((coord) => {
-        this.spatialIndex.insert(coord, {
-          termId: highlight.termId,
-          pageNumber,
-          coordinates: coord,
-        });
+    occurrences.forEach((ref) => {
+      this.spatialIndex.insert(ref.bbox, {
+        termId: ref.id,
+        pageNumber: pageNumber ?? ref.page,
+        bboxIndex: ref.bboxIndex,
+        coordinates: ref.bbox,
       });
     });
   }
 
-  findHighlightsInViewport(viewportBounds: BoundingBox): any[] {
+  findHighlightsInViewport(viewportBounds: BoundingBox): SpatialHit[] {
     return this.spatialIndex.search(viewportBounds);
   }
 

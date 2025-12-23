@@ -4,7 +4,8 @@ import {
   SelectionState,
   TextRange,
   SelectionWithMetadata,
-  TermOccurrence,
+  PageBBoxRef,
+  BoundingBox,
   HighlightHoverEvent,
   HighlightClickEvent,
   TextSelectionEvent,
@@ -258,18 +259,20 @@ export class UnifiedInteractionHandler {
 
   private handleHighlightHover(event: MouseEvent, element: Element, termId: string): void {
     const rect = element.getBoundingClientRect();
-    const category = this.getCategoryFromElement(element);
+
+    const bboxIndex = this.getBBoxIndexFromElement(element);
+    const pageNumber = this.getPageNumberFromElement(element);
 
     const hoverEvent: HighlightHoverEvent = {
       termId,
-      category,
-      coordinates: {
+      pageNumber,
+      bboxIndex,
+      bbox: {
         x1: rect.left,
         y1: rect.top,
         x2: rect.right,
         y2: rect.bottom,
       },
-      pageNumber: this.getPageNumberFromElement(element),
       mouseEvent: event,
     };
 
@@ -287,24 +290,23 @@ export class UnifiedInteractionHandler {
 
   private handleHighlightClick(event: MouseEvent, element: Element): void {
     const termId = element.getAttribute('data-term-id');
-
-    if (!termId) {
-      return;
-    }
+    if (!termId) return;
 
     const rect = element.getBoundingClientRect();
-    const category = this.getCategoryFromElement(element);
+
+    const bboxIndex = this.getBBoxIndexFromElement(element);
+    const pageNumber = this.getPageNumberFromElement(element);
 
     const clickEvent: HighlightClickEvent = {
       termId,
-      category,
-      coordinates: {
+      pageNumber,
+      bboxIndex,
+      bbox: {
         x1: rect.left,
         y1: rect.top,
         x2: rect.right,
         y2: rect.bottom,
       },
-      pageNumber: this.getPageNumberFromElement(element),
       mouseEvent: event,
     };
 
@@ -347,8 +349,16 @@ export class UnifiedInteractionHandler {
     }
   }
 
-  private findHighlightsInRange(range: Range): TermOccurrence[] {
-    const highlights: TermOccurrence[] = [];
+  private getBBoxIndexFromElement(element: Element): number | undefined {
+    const raw = element.getAttribute('data-bbox-index');
+    if (raw == null) return undefined;
+
+    const n = Number(raw);
+    return Number.isFinite(n) ? n : undefined;
+  }
+
+  private findHighlightsInRange(range: Range): PageBBoxRef[] {
+    const result = new Map<string, PageBBoxRef>();
 
     const container = range.commonAncestorContainer;
     const walker = document.createTreeWalker(
@@ -364,27 +374,33 @@ export class UnifiedInteractionHandler {
       }
     );
 
-    let node;
+    let node: Node | null;
     while ((node = walker.nextNode())) {
       const element = node as Element;
-      const termId = element.getAttribute('data-term-id');
-      if (termId && range.intersectsNode(element)) {
-        const rect = element.getBoundingClientRect();
-        highlights.push({
-          termId,
-          coordinates: [
-            {
-              x1: rect.left,
-              y1: rect.top,
-              x2: rect.right,
-              y2: rect.bottom,
-            },
-          ],
-        });
+
+      const id = element.getAttribute('data-term-id');
+      if (!id) continue;
+
+      if (!range.intersectsNode(element)) continue;
+
+      const page = this.getPageNumberFromElement(element);
+      const bboxIndex = this.getBBoxIndexFromElement(element) ?? 0;
+
+      const rect = element.getBoundingClientRect();
+      const bbox: BoundingBox = {
+        x1: rect.left,
+        y1: rect.top,
+        x2: rect.right,
+        y2: rect.bottom,
+      };
+
+      const key = `${id}:${page}:${bboxIndex}`;
+      if (!result.has(key)) {
+        result.set(key, { id, page, bboxIndex, bbox });
       }
     }
 
-    return highlights;
+    return Array.from(result.values());
   }
 
   private getPagesFromRange(range: Range): number[] {
@@ -499,13 +515,13 @@ export class UnifiedInteractionHandler {
     };
   }
 
-  private getCategoryFromElement(element: Element): string {
-    const classList = Array.from(element.classList);
-    const categoryClass = classList.find((cls) => cls.endsWith('-highlight'));
-    return categoryClass ? categoryClass.replace('-highlight', '') : 'unknown';
-  }
-
   private getPageNumberFromElement(element: Element): number {
+    const direct = element.getAttribute('data-page');
+    if (direct) {
+      const n = Number(direct);
+      if (Number.isFinite(n)) return n;
+    }
+
     const pageContainer = element.closest('.pdf-page-container');
     return pageContainer ? parseInt(pageContainer.getAttribute('data-page-number') || '1') : 1;
   }

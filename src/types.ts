@@ -8,6 +8,20 @@ export interface BBox {
   page: number;
 }
 
+export interface PageBBoxRef {
+  id: string;
+  page: number;
+  bboxIndex: number;
+  bbox: BoundingBox;
+}
+
+export interface HighlightsIndex {
+  highlights: InputHighlightData[];
+  byId: Map<string, InputHighlightData>;
+  pages: Record<string, PageBBoxRef[]>;
+  occurrences: PageBBoxRef[];
+}
+
 export interface HighlightStyle {
   backgroundColor: string;
   borderColor?: string;
@@ -65,33 +79,6 @@ export interface BoundingBox {
   y2: number;
 }
 
-export interface TermOccurrence {
-  termId: string;
-  coordinates: BoundingBox[];
-}
-
-export interface TermMetadata {
-  term: string;
-  category: string;
-  frequency: number;
-  aliases: string[];
-  relatedTerms: string[];
-  pages: number[];
-  explanations: {
-    page: number;
-    coordinates: BoundingBox;
-    text: string;
-  }[];
-}
-
-export type HighlightData = Record<
-  string,
-  {
-    pages: Record<string, TermOccurrence[]>;
-    terms: Record<string, TermMetadata>;
-  }
->;
-
 export interface TextContent {
   items: TextItem[];
   styles: any;
@@ -112,7 +99,7 @@ export interface Segment {
   hasHighlight: boolean;
   highlightInfo?: {
     termId: string;
-    category: string;
+    style?: HighlightStyle;
   };
   transform: number[];
   fontName: string;
@@ -124,7 +111,6 @@ export interface AnalysisResult {
     start: number;
     end: number;
     termId: string;
-    category: string;
   }[];
 }
 
@@ -136,7 +122,7 @@ export interface SelectionState {
   startPoint: { x: number; y: number } | null;
   endPoint: { x: number; y: number } | null;
   selectedText: string;
-  overlappingHighlights: TermOccurrence[];
+  overlappingHighlights: PageBBoxRef[];
 }
 
 export interface TextRange {
@@ -149,36 +135,37 @@ export interface TextRange {
 export interface SelectionWithMetadata {
   text: string;
   pages: number[];
-  highlights: TermOccurrence[];
+  highlights: PageBBoxRef[];
   context: string;
   range: TextRange;
 }
 
 export interface HighlightHoverEvent {
   termId: string;
-  category: string;
-  coordinates: BoundingBox;
   pageNumber: number;
+  bboxIndex?: number;
+  bbox?: BoundingBox;
+  highlight?: InputHighlightData;
   mouseEvent: MouseEvent;
 }
 
 export interface HighlightClickEvent {
   termId: string;
-  category: string;
-  coordinates: BoundingBox;
   pageNumber: number;
+  bboxIndex?: number;
+  bbox?: BoundingBox;
+  highlight?: InputHighlightData;
   mouseEvent: MouseEvent;
 }
 
 export interface HighlightSelectEvent {
   termId: string;
-  category: string;
-  occurrences: TermOccurrence[];
+  occurrences: PageBBoxRef[];
 }
 
 export interface TextSelectionEvent {
   text: string;
-  highlights: TermOccurrence[];
+  highlights: PageBBoxRef[];
   range: Range;
   pageNumbers: number[];
 }
@@ -190,8 +177,8 @@ export interface SelectionCopyEvent {
 
 export interface SelectionHighlightEvent {
   text: string;
-  category: string;
-  coordinates: BoundingBox[];
+  termId: string;
+  highlight: InputHighlightData;
 }
 
 export interface PageChangeEvent {
@@ -217,19 +204,6 @@ export interface PerformanceWarningEvent {
   metrics: any;
 }
 
-export interface CategoryStyle {
-  backgroundColor: string;
-  borderColor: string;
-  opacity?: number;
-  hoverOpacity?: number;
-  pulseAnimation?: boolean;
-}
-
-export interface CategoryStyleManager {
-  registerCategory(name: string, style: CategoryStyle): void;
-  getComputedStyle(termId: string, state: 'default' | 'hover' | 'selected'): React.CSSProperties;
-}
-
 export interface MemoryMetrics {
   pages: number;
   highlights: number;
@@ -253,7 +227,6 @@ export interface UserAction {
 
 export interface HighlightAnalytics {
   totalHighlights: number;
-  categoryBreakdown: Record<string, number>;
   mostViewedPages: number[];
   interactionHeatmap: Record<number, number>;
   averageTimePerPage: number;
@@ -263,7 +236,6 @@ export interface Page {
   pageNumber: number;
   canvas?: HTMLCanvasElement;
   textContent?: TextContent;
-  highlights?: TermOccurrence[];
   rendered: boolean;
   loading: boolean;
   viewport?: any;
@@ -272,7 +244,7 @@ export interface Page {
 
 export interface HighlightsConfig {
   enableMultilineHover?: boolean;
-  getHighlightColor?: (termId: string) => string;
+  defaultStyle?: HighlightStyle; // optional fallback if highlight.style is missing
 }
 
 export interface ViewerOptions {
@@ -297,6 +269,13 @@ export interface HeavyTask {
   type: 'text-extraction' | 'highlight-processing' | 'spatial-indexing';
   data: any;
   pageNumber?: number;
+}
+
+export interface SpatialHit {
+  termId: string;
+  pageNumber: number;
+  bboxIndex: number;
+  coordinates: BoundingBox;
 }
 
 export interface RTree {
