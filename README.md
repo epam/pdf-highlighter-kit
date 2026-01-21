@@ -1,6 +1,13 @@
-# PDF Highlight Viewer
+<div align="center">
+  <h1>PDF Highlight Viewer</h1>
+  <p>High-performance PDF viewer with intelligent highlighting and text selection capabilities for web applications.</p>
 
-High-performance PDF viewer with intelligent highlighting and text selection capabilities for web applications.
+  [![npm version](https://img.shields.io/npm/v/@epam/pdf-highlighter-kit)](https://www.npmjs.com/package/@epam/pdf-highlighter-kit) [![License](https://img.shields.io/badge/License-Apache--2.0-blue.svg)](https://opensource.org/licenses/Apache-2.0) [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](https://github.com/epam/pdf-highlighter-kit/pulls)
+
+  <p>An open-source project by <strong>BadgerDoc</strong> <img src="./logo.svg" alt="BadgerDoc" width="22" height="21" style="vertical-align: middle; margin-bottom: 3px;"></p>
+</div>
+
+---
 
 ## Installation
 
