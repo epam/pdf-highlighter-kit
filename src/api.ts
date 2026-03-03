@@ -8,6 +8,7 @@ import {
   InteractionMode,
   InputHighlightData,
   HighlightStyle,
+  ZoomValue,
 } from './types';
 
 export interface PDFHighlightViewer {
@@ -21,7 +22,7 @@ export interface PDFHighlightViewer {
 
   getZoom(): number;
 
-  setZoom(scale: number): void;
+  setZoom(value: ZoomValue): void;
 
   getCurrentPage(): number;
 

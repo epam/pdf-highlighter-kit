@@ -299,3 +299,10 @@ export interface EventSystem {
   onRenderComplete: (event: RenderCompleteEvent) => void;
   onPerformanceWarning: (event: PerformanceWarningEvent) => void;
 }
+
+export enum ZoomMode {
+  AUTO = 'auto',
+  PAGE_FIT = 'page-fit',
+}
+
+export type ZoomValue = ZoomMode | number;
