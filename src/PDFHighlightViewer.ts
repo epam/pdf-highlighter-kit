@@ -12,6 +12,7 @@ import {
   HighlightStyle,
   ZoomValue,
   ZoomMode,
+  ThumbnailOptions,
 } from './types';
 import { PDFEngine } from './core/pdf-engine';
 import { ViewportManager } from './core/viewport-manager';
@@ -712,6 +713,26 @@ export class PDFHighlightViewer implements IPDFHighlightViewer {
     return this.totalPages;
   }
 
+  async getThumbnails(
+    pageNumbers: number[],
+    options?: ThumbnailOptions
+  ): Promise<Map<number, HTMLCanvasElement>> {
+    return this.pdfEngine.getThumbnails(pageNumbers, options);
+  }
+
+  async getThumbnailsDataUrl(
+    pageNumbers: number[],
+    options?: ThumbnailOptions
+  ): Promise<Map<number, string>> {
+    const canvases = await this.getThumbnails(pageNumbers, options);
+    const format = options?.format ?? 'image/webp';
+    const quality = options?.quality ?? 0.85;
+    const result = new Map<number, string>();
+    canvases.forEach((canvas, pageNumber) => {
+      result.set(pageNumber, canvas.toDataURL(format, quality));
+    });
+    return result;
+  }
   // =============================================================================
   // Text Selection Management
   // =============================================================================

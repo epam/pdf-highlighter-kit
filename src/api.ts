@@ -28,6 +28,21 @@ export interface PDFHighlightViewer {
 
   getTotalPages(): number;
 
+  getThumbnails(
+    pageNumbers: number[],
+    options?: { maxWidth?: number; scale?: number }
+  ): Promise<Map<number, HTMLCanvasElement>>;
+
+  getThumbnailsDataUrl(
+    pageNumbers: number[],
+    options?: {
+      maxWidth?: number;
+      scale?: number;
+      format?: 'image/jpeg' | 'image/webp' | 'image/png';
+      quality?: number;
+    }
+  ): Promise<Map<number, string>>;
+
   loadHighlights(data: InputHighlightData[]): void;
 
   addHighlight(highlight: InputHighlightData): void;

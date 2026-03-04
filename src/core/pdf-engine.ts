@@ -1,5 +1,12 @@
 import * as pdfjsLib from 'pdfjs-dist';
-import { TextContent, Page, ViewerOptions, Priority, RenderingQueue } from '../types';
+import {
+  TextContent,
+  Page,
+  ViewerOptions,
+  Priority,
+  RenderingQueue,
+  ThumbnailOptions,
+} from '../types';
 import {
   normalizePDFSource,
   validateBase64PDF,
@@ -26,6 +33,9 @@ export class PDFEngine {
   private canvasPool: HTMLCanvasElement[] = [];
   private pageRenderCallback: ((pageNumber: number) => Promise<void>) | null = null;
   private maxPoolSize = 10;
+
+  private thumbnailCache = new Map<number, HTMLCanvasElement>();
+  private static readonly THUMBNAIL_DEFAULT_SCALE = 0.2;
 
   constructor(private options: ViewerOptions = {}) {
     this.initializeCanvasPool();
@@ -309,6 +319,74 @@ export class PDFEngine {
     }
   }
 
+  async renderThumbnail(
+    pageNumber: number,
+    options?: ThumbnailOptions
+  ): Promise<HTMLCanvasElement> {
+    if (!this.pdfDocument) {
+      throw new Error('No PDF document loaded');
+    }
+
+    const pageData = this.pages.get(pageNumber);
+    if (!pageData) {
+      throw new Error(`Page ${pageNumber} not found`);
+    }
+
+    const cached = this.thumbnailCache.get(pageNumber);
+    if (cached) {
+      return cached;
+    }
+
+    const page = await this.getPage(pageNumber);
+    let scale = options?.scale ?? PDFEngine.THUMBNAIL_DEFAULT_SCALE;
+    if (options?.maxWidth != null && options.maxWidth > 0) {
+      const viewportAt1 = page.getViewport({ scale: 1 });
+      scale = options.maxWidth / viewportAt1.width;
+    }
+    const viewport = page.getViewport({ scale });
+
+    const canvas = document.createElement('canvas');
+    canvas.width = viewport.width;
+    canvas.height = viewport.height;
+    const context = canvas.getContext('2d');
+    if (!context) {
+      throw new Error('Failed to get 2D context for thumbnail');
+    }
+
+    await page.render({
+      canvasContext: context,
+      viewport,
+      canvas,
+    }).promise;
+
+    this.thumbnailCache.set(pageNumber, canvas);
+    return canvas;
+  }
+
+  async getThumbnails(
+    pageNumbers: number[],
+    options?: ThumbnailOptions
+  ): Promise<Map<number, HTMLCanvasElement>> {
+    const result = new Map<number, HTMLCanvasElement>();
+    const concurrency = 3;
+    const queue = [...pageNumbers];
+
+    const worker = async (): Promise<void> => {
+      while (queue.length > 0) {
+        const pageNumber = queue.shift()!;
+        try {
+          const canvas = await this.renderThumbnail(pageNumber, options);
+          result.set(pageNumber, canvas);
+        } catch (error) {
+          console.warn(`Failed to render thumbnail for page ${pageNumber}:`, error);
+        }
+      }
+    };
+
+    await Promise.all(Array.from({ length: concurrency }, () => worker()));
+    return result;
+  }
+
   getPageData(pageNumber: number): Page | undefined {
     return this.pages.get(pageNumber);
   }
@@ -344,6 +422,7 @@ export class PDFEngine {
     this.pages.clear();
     this.renderingQueue = { high: [], medium: [], low: [], idle: [] };
     this.canvasPool = [];
+    this.thumbnailCache.clear();
     this.isRendering = false;
   }
 }

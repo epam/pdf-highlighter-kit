@@ -258,6 +258,15 @@ export interface ViewerOptions {
   highlightsConfig?: HighlightsConfig;
 }
 
+export interface ThumbnailOptions {
+  maxWidth?: number;
+  scale?: number;
+  /** Image format for data URL (used by getThumbnailsDataUrl). Default 'jpeg'. */
+  format?: 'image/jpeg' | 'image/webp' | 'image/png';
+  /** Quality for jpeg/webp (0–1). Used by getThumbnailsDataUrl. Default 0.85. */
+  quality?: number;
+}
+
 export interface AccessibilityFeatures {
   enableKeyboardNavigation(): void;
   enableScreenReader(): void;
