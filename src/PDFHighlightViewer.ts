@@ -1472,6 +1472,43 @@ export class PDFHighlightViewer implements IPDFHighlightViewer {
           });
 
           highlightLayer.appendChild(highlightDiv);
+
+          if (highlight.label) {
+            const labelEl = document.createElement('span');
+            labelEl.className = 'highlight-label';
+            labelEl.textContent = highlight.label;
+            labelEl.setAttribute('data-term-id', highlight.id);
+            labelEl.style.position = 'absolute';
+            labelEl.style.left = `${bbox.x1 * scale}px`;
+            labelEl.style.transform = 'translateX(-100%)';
+            labelEl.style.top = `${top}px`;
+            labelEl.style.display = 'flex';
+            labelEl.style.alignItems = 'center';
+            labelEl.style.justifyContent = 'flex-end';
+            labelEl.style.pointerEvents = 'auto';
+            labelEl.style.cursor = 'pointer';
+            labelEl.style.whiteSpace = 'nowrap';
+
+            const labelColor = style?.borderColor ?? style?.backgroundColor ?? '#666666';
+            labelEl.style.border = `1px solid ${labelColor}`;
+
+            const ls = highlight.labelStyle;
+            if (ls) {
+              if (ls.fontSize != null)
+                labelEl.style.fontSize =
+                  typeof ls.fontSize === 'number' ? `${ls.fontSize}px` : String(ls.fontSize);
+              if (ls.color != null) labelEl.style.color = ls.color;
+              if (ls.backgroundColor != null) labelEl.style.backgroundColor = ls.backgroundColor;
+              if (ls.padding != null) labelEl.style.padding = ls.padding;
+              if (ls.borderRadius != null) labelEl.style.borderRadius = ls.borderRadius;
+              if (ls.fontFamily != null) labelEl.style.fontFamily = ls.fontFamily;
+              if (ls.fontWeight != null) labelEl.style.fontWeight = String(ls.fontWeight);
+              if (ls.border != null) labelEl.style.border = ls.border;
+              if (ls.whiteSpace != null) labelEl.style.whiteSpace = ls.whiteSpace;
+            }
+
+            highlightLayer.appendChild(labelEl);
+          }
         }
       }
 

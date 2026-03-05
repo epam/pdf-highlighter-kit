@@ -93,6 +93,19 @@
   transform: scale(1.02);
 }
 
+.highlight-label {
+  border: 1px solid transparent;
+  padding: 2px 4px;
+  font-size: 12px;
+  line-height: 1.2;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.unified-layer .highlight-label {
+  margin-right: 0;
+}
+
 .protein-highlight .highlight-background {
   background: rgba(255, 200, 0, 0.3);
   border: 1px solid rgba(255, 180, 0, 0.6);

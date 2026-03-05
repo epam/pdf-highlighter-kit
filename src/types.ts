@@ -31,10 +31,24 @@ export interface HighlightStyle {
   pulseAnimation?: boolean;
 }
 
+export interface HighlightLabelStyle {
+  fontSize?: string | number;
+  color?: string;
+  backgroundColor?: string;
+  padding?: string;
+  borderRadius?: string;
+  fontFamily?: string;
+  fontWeight?: string | number;
+  border?: string;
+  whiteSpace?: string;
+}
+
 export interface InputHighlightData {
   id: string;
   bboxes: BBox[];
   style?: HighlightStyle;
+  label?: string;
+  labelStyle?: HighlightLabelStyle;
   tooltipText?: string;
   metadata?: Record<string, any>;
 }
@@ -100,6 +114,8 @@ export interface Segment {
   highlightInfo?: {
     termId: string;
     style?: HighlightStyle;
+    label?: string;
+    labelStyle?: HighlightLabelStyle;
   };
   transform: number[];
   fontName: string;

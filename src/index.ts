@@ -9,6 +9,7 @@ export type {
   InputHighlightData,
   BBox,
   HighlightStyle,
+  HighlightLabelStyle,
   TextRange,
   SelectionWithMetadata,
   PerformanceMetrics,

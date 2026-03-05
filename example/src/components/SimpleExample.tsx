@@ -10,6 +10,8 @@ const initialHighlights: InputHighlightData[] = [
     id: 'red-zone',
     bboxes: [{ x1: 180, y1: 110, x2: 340, y2: 130, page: 1 }],
     style: { backgroundColor: '#ff6b6b', opacity: 0.4 },
+    label: 'Red zone',
+    labelStyle: { fontSize: 10, border: '1px solid rgba(255, 107, 107, 0.55)', padding: '2px 4px' },
     tooltipText: 'Red highlight zone',
   },
   {

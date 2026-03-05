@@ -5,12 +5,15 @@ import {
   TextItem,
   InputHighlightData,
   HighlightStyle,
+  HighlightLabelStyle,
 } from '../types';
 
 interface ItemHighlight {
   termId: string;
   coordinates: BoundingBox;
   style?: HighlightStyle;
+  label?: string;
+  labelStyle?: HighlightLabelStyle;
 }
 
 export class UnifiedLayerBuilder {
@@ -62,6 +65,8 @@ export class UnifiedLayerBuilder {
         out.push({
           termId: h.id,
           style: h.style,
+          label: h.label,
+          labelStyle: h.labelStyle,
           coordinates: { x1: b.x1, y1: b.y1, x2: b.x2, y2: b.y2 },
         });
       }
@@ -125,6 +130,8 @@ export class UnifiedLayerBuilder {
       highlightInfo: {
         termId: primary.termId,
         style: primary.style,
+        label: primary.label,
+        labelStyle: primary.labelStyle,
       },
       transform: textItem.transform,
       fontName: textItem.fontName,
@@ -208,7 +215,20 @@ export class UnifiedLayerBuilder {
     wrapper.className = 'highlight-wrapper';
     wrapper.setAttribute('data-term-id', segment.highlightInfo?.termId || '');
 
-    // Background (visual highlight)
+    // Label first (left of highlight), then inner container: background + text
+    if (segment.highlightInfo?.label) {
+      const labelEl = document.createElement('span');
+      labelEl.className = 'highlight-label';
+      labelEl.textContent = segment.highlightInfo.label;
+      this.applyDefaultLabelStyle(labelEl, segment.highlightInfo.style);
+      this.applyLabelStyle(labelEl, segment.highlightInfo.labelStyle);
+      wrapper.appendChild(labelEl);
+    }
+
+    const inner = document.createElement('span');
+    inner.style.position = 'relative';
+    inner.style.display = 'inline';
+
     const background = document.createElement('span');
     background.className = 'highlight-background';
     background.style.position = 'absolute';
@@ -224,16 +244,41 @@ export class UnifiedLayerBuilder {
     textSpan.style.position = 'relative';
     textSpan.style.zIndex = '1';
 
-    wrapper.appendChild(background);
-    wrapper.appendChild(textSpan);
+    inner.appendChild(background);
+    inner.appendChild(textSpan);
+    wrapper.appendChild(inner);
+
+    wrapper.style.display = 'inline-flex';
+    wrapper.style.alignItems = 'baseline';
+    wrapper.style.gap = '0';
 
     this.applyInlineHighlightStyle(background, segment.highlightInfo?.style);
 
     this.applyTextPositioning(wrapper, segment, scale);
-    wrapper.style.position = 'absolute'; // ensure background absolute positioning works
+    wrapper.style.position = 'absolute';
     wrapper.style.userSelect = 'text';
 
     return wrapper;
+  }
+
+  private applyDefaultLabelStyle(el: HTMLElement, highlightStyle?: HighlightStyle): void {
+    const color = highlightStyle?.borderColor ?? highlightStyle?.backgroundColor ?? '#666666';
+    el.style.border = `1px solid ${color}`;
+  }
+
+  private applyLabelStyle(el: HTMLElement, style?: HighlightLabelStyle): void {
+    if (!style) return;
+    if (style.fontSize != null)
+      el.style.fontSize =
+        typeof style.fontSize === 'number' ? `${style.fontSize}px` : String(style.fontSize);
+    if (style.color != null) el.style.color = style.color;
+    if (style.backgroundColor != null) el.style.backgroundColor = style.backgroundColor;
+    if (style.padding != null) el.style.padding = style.padding;
+    if (style.borderRadius != null) el.style.borderRadius = style.borderRadius;
+    if (style.fontFamily != null) el.style.fontFamily = style.fontFamily;
+    if (style.fontWeight != null) el.style.fontWeight = String(style.fontWeight);
+    if (style.border != null) el.style.border = style.border;
+    if (style.whiteSpace != null) el.style.whiteSpace = style.whiteSpace;
   }
 
   private applyInlineHighlightStyle(el: HTMLElement, style?: HighlightStyle): void {

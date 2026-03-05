@@ -56,6 +56,8 @@ const highlights: InputHighlightData[] = [
       borderColor: '#d4c400',
       borderWidth: '1px',
     },
+    label: 'Important Term',
+    labelStyle: { fontSize: 11 },
     tooltipText: 'Important Term',
     metadata: {
       frequency: 5,
@@ -76,6 +78,8 @@ viewer.goToHighlight('term-001', 0);
 
 Each highlight carries its own style. No categories are required.
 
+**Labels:** You can add an optional `label` that is displayed to the left of the highlight, flush against it. By default the label uses the highlight’s color (from `style.borderColor` or `style.backgroundColor`), `border: 1px solid`, and `padding: 2px 4px`. Override any of these with `labelStyle` (e.g. `fontSize`, `color`, `padding`, `border`).
+
 ```ts
 export interface BBox {
   x1: number;
@@ -94,10 +98,24 @@ export interface HighlightStyle {
   pulseAnimation?: boolean;
 }
 
+export interface HighlightLabelStyle {
+  fontSize?: string | number;
+  color?: string;
+  backgroundColor?: string;
+  padding?: string;
+  borderRadius?: string;
+  fontFamily?: string;
+  fontWeight?: string | number;
+  border?: string;
+  whiteSpace?: string;
+}
+
 export interface InputHighlightData {
   id: string;
   bboxes: BBox[];
   style?: HighlightStyle;
+  label?: string;
+  labelStyle?: HighlightLabelStyle;
   tooltipText?: string;
   metadata?: Record<string, any>;
 }
@@ -273,6 +291,8 @@ const highlight: InputHighlightData = {
     borderWidth: '1px',
     hoverOpacity: 0.6,
   },
+  label: 'My note',
+  labelStyle: { padding: '2px 6px', borderRadius: '4px' },
   tooltipText: 'My note',
 };
 
