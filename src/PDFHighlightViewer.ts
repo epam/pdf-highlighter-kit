@@ -1473,10 +1473,9 @@ export class PDFHighlightViewer implements IPDFHighlightViewer {
 
           highlightLayer.appendChild(highlightDiv);
 
-          if (highlight.label) {
+          if (highlight.label || highlight.beforeIcon) {
             const labelEl = document.createElement('span');
             labelEl.className = 'highlight-label';
-            labelEl.textContent = highlight.label;
             labelEl.setAttribute('data-term-id', highlight.id);
             labelEl.style.position = 'absolute';
             labelEl.style.left = `${bbox.x1 * scale}px`;
@@ -1485,6 +1484,7 @@ export class PDFHighlightViewer implements IPDFHighlightViewer {
             labelEl.style.display = 'flex';
             labelEl.style.alignItems = 'center';
             labelEl.style.justifyContent = 'flex-end';
+            labelEl.style.gap = '4px';
             labelEl.style.pointerEvents = 'auto';
             labelEl.style.cursor = 'pointer';
             labelEl.style.whiteSpace = 'nowrap';
@@ -1505,6 +1505,30 @@ export class PDFHighlightViewer implements IPDFHighlightViewer {
               if (ls.fontWeight != null) labelEl.style.fontWeight = String(ls.fontWeight);
               if (ls.border != null) labelEl.style.border = ls.border;
               if (ls.whiteSpace != null) labelEl.style.whiteSpace = ls.whiteSpace;
+            }
+
+            if (highlight.beforeIcon) {
+              const iconWrap = document.createElement('span');
+              iconWrap.className = 'highlight-label-icon';
+              iconWrap.innerHTML = highlight.beforeIcon;
+              const svg = iconWrap.querySelector('svg');
+              if (svg) {
+                svg.removeAttribute('width');
+                svg.removeAttribute('height');
+              }
+              const iconSize = ls?.iconSize;
+              const size =
+                iconSize != null
+                  ? typeof iconSize === 'number'
+                    ? `${iconSize}px`
+                    : String(iconSize)
+                  : '1em';
+              iconWrap.style.width = size;
+              iconWrap.style.height = size;
+              labelEl.appendChild(iconWrap);
+            }
+            if (highlight.label) {
+              labelEl.appendChild(document.createTextNode(highlight.label));
             }
 
             highlightLayer.appendChild(labelEl);

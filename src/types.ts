@@ -41,6 +41,8 @@ export interface HighlightLabelStyle {
   fontWeight?: string | number;
   border?: string;
   whiteSpace?: string;
+  /** Size for the icon before the label (e.g. '14px', 16). Used when beforeIcon is set. */
+  iconSize?: string | number;
 }
 
 export interface InputHighlightData {
@@ -48,6 +50,8 @@ export interface InputHighlightData {
   bboxes: BBox[];
   style?: HighlightStyle;
   label?: string;
+  /** Inline SVG string (e.g. from Tabler) to render before the label inside the label frame. Use trusted content only. */
+  beforeIcon?: string;
   labelStyle?: HighlightLabelStyle;
   tooltipText?: string;
   metadata?: Record<string, any>;
@@ -115,6 +119,7 @@ export interface Segment {
     termId: string;
     style?: HighlightStyle;
     label?: string;
+    beforeIcon?: string;
     labelStyle?: HighlightLabelStyle;
   };
   transform: number[];

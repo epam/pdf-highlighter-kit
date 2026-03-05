@@ -13,6 +13,7 @@ interface ItemHighlight {
   coordinates: BoundingBox;
   style?: HighlightStyle;
   label?: string;
+  beforeIcon?: string;
   labelStyle?: HighlightLabelStyle;
 }
 
@@ -66,6 +67,7 @@ export class UnifiedLayerBuilder {
           termId: h.id,
           style: h.style,
           label: h.label,
+          beforeIcon: h.beforeIcon,
           labelStyle: h.labelStyle,
           coordinates: { x1: b.x1, y1: b.y1, x2: b.x2, y2: b.y2 },
         });
@@ -131,6 +133,7 @@ export class UnifiedLayerBuilder {
         termId: primary.termId,
         style: primary.style,
         label: primary.label,
+        beforeIcon: primary.beforeIcon,
         labelStyle: primary.labelStyle,
       },
       transform: textItem.transform,
@@ -216,12 +219,39 @@ export class UnifiedLayerBuilder {
     wrapper.setAttribute('data-term-id', segment.highlightInfo?.termId || '');
 
     // Label first (left of highlight), then inner container: background + text
-    if (segment.highlightInfo?.label) {
+    if (segment.highlightInfo?.label || segment.highlightInfo?.beforeIcon) {
       const labelEl = document.createElement('span');
       labelEl.className = 'highlight-label';
-      labelEl.textContent = segment.highlightInfo.label;
+      labelEl.style.display = 'inline-flex';
+      labelEl.style.alignItems = 'center';
+      labelEl.style.gap = '4px';
       this.applyDefaultLabelStyle(labelEl, segment.highlightInfo.style);
       this.applyLabelStyle(labelEl, segment.highlightInfo.labelStyle);
+
+      if (segment.highlightInfo.beforeIcon) {
+        const iconWrap = document.createElement('span');
+        iconWrap.className = 'highlight-label-icon';
+        iconWrap.innerHTML = segment.highlightInfo.beforeIcon;
+        const svg = iconWrap.querySelector('svg');
+        if (svg) {
+          svg.removeAttribute('width');
+          svg.removeAttribute('height');
+        }
+        const iconSize = segment.highlightInfo.labelStyle?.iconSize;
+        const size =
+          iconSize != null
+            ? typeof iconSize === 'number'
+              ? `${iconSize}px`
+              : String(iconSize)
+            : '1em';
+        iconWrap.style.width = size;
+        iconWrap.style.height = size;
+        labelEl.appendChild(iconWrap);
+      }
+      if (segment.highlightInfo.label) {
+        const textNode = document.createTextNode(segment.highlightInfo.label);
+        labelEl.appendChild(textNode);
+      }
       wrapper.appendChild(labelEl);
     }
 

@@ -5,13 +5,22 @@ import '@epam/ai-dial-ui-kit/styles.css';
 
 const PDF_URL = 'https://ontheline.trincoll.edu/images/bookdown/sample-local-pdf.pdf';
 
+const ICON_ALERT_CIRCLE_SVG =
+  '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 8v4"/><path d="M12 16h.01"/><circle cx="12" cy="12" r="10"/></svg>';
+
 const initialHighlights: InputHighlightData[] = [
   {
     id: 'red-zone',
     bboxes: [{ x1: 180, y1: 110, x2: 340, y2: 130, page: 1 }],
     style: { backgroundColor: '#ff6b6b', opacity: 0.4 },
     label: 'Red zone',
-    labelStyle: { fontSize: 10, border: '1px solid rgba(255, 107, 107, 0.55)', padding: '2px 4px' },
+    beforeIcon: ICON_ALERT_CIRCLE_SVG,
+    labelStyle: {
+      fontSize: 10,
+      border: '1px solid rgba(255, 107, 107, 0.55)',
+      padding: '2px 4px',
+      iconSize: 14,
+    },
     tooltipText: 'Red highlight zone',
   },
   {

@@ -80,6 +80,8 @@ Each highlight carries its own style. No categories are required.
 
 **Labels:** You can add an optional `label` that is displayed to the left of the highlight, flush against it. By default the label uses the highlight’s color (from `style.borderColor` or `style.backgroundColor`), `border: 1px solid`, and `padding: 2px 4px`. Override any of these with `labelStyle` (e.g. `fontSize`, `color`, `padding`, `border`).
 
+**Icon before label:** Optionally set `beforeIcon` to an inline SVG string (e.g. from [Tabler Icons](https://tabler.io/icons)) to render an icon inside the label frame, to the left of the text. The icon inherits the label color via `currentColor`. Use `labelStyle.iconSize` to set the icon size (e.g. `14` or `'14px'`). Only pass trusted SVG content (e.g. from your bundle or `@tabler/icons`); in React with Vite you can use `import iconSvg from '@tabler/icons/icons/outline/alert-circle.svg?raw'` and pass `iconSvg` as `beforeIcon`.
+
 ```ts
 export interface BBox {
   x1: number;
@@ -108,6 +110,7 @@ export interface HighlightLabelStyle {
   fontWeight?: string | number;
   border?: string;
   whiteSpace?: string;
+  iconSize?: string | number;  // size for beforeIcon (e.g. 14 or '14px')
 }
 
 export interface InputHighlightData {
@@ -115,6 +118,7 @@ export interface InputHighlightData {
   bboxes: BBox[];
   style?: HighlightStyle;
   label?: string;
+  beforeIcon?: string;  // inline SVG string (trusted content only, e.g. Tabler icons)
   labelStyle?: HighlightLabelStyle;
   tooltipText?: string;
   metadata?: Record<string, any>;
@@ -294,6 +298,27 @@ const highlight: InputHighlightData = {
   label: 'My note',
   labelStyle: { padding: '2px 6px', borderRadius: '4px' },
   tooltipText: 'My note',
+};
+
+viewer.addHighlight(highlight);
+```
+
+### Label with icon (e.g. Tabler Icons)
+
+Pass an inline SVG string as `beforeIcon` to show an icon inside the label frame. Use trusted content only. With Vite you can import SVG as raw string:
+
+```ts
+// Inline SVG string (e.g. from Tabler: import icon from '@tabler/icons/icons/outline/alert-circle.svg?raw')
+const alertIconSvg = '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 8v4"/><path d="M12 16h.01"/><circle cx="12" cy="12" r="10"/></svg>';
+
+const highlight: InputHighlightData = {
+  id: 'alert-001',
+  bboxes: [{ page: 1, x1: 100, y1: 200, x2: 300, y2: 220 }],
+  style: { backgroundColor: '#ffeb3b', opacity: 0.3, borderColor: '#d4c400' },
+  label: 'Important',
+  beforeIcon: alertIconSvg,
+  labelStyle: { fontSize: 11, iconSize: 14 },
+  tooltipText: 'Important',
 };
 
 viewer.addHighlight(highlight);
