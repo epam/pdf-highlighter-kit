@@ -40,6 +40,8 @@ export type {
   AnalysisResult,
   HeavyTask,
   EventSystem,
+  ZoomMode,
+  ZoomValue,
 } from './types';
 
 export { PDFEngine } from './core/pdf-engine';

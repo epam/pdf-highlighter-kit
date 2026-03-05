@@ -1,4 +1,4 @@
-import { InputHighlightData, PDFHighlightViewer, HighlightStyle } from '../../../src';
+import { HighlightStyle, InputHighlightData, PDFHighlightViewer, ZoomMode } from '../../../src';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ButtonVariant, DialButton, DialDropdown } from '@epam/ai-dial-ui-kit';
 import '@epam/ai-dial-ui-kit/styles.css';
@@ -420,6 +420,16 @@ export const SimpleExample: React.FC = () => {
             label="Zoom -"
             variant={ButtonVariant.Secondary}
             onClick={() => viewerRef.current?.zoomOut()}
+          />
+          <DialButton
+            label="Auto zoom"
+            variant={ButtonVariant.Secondary}
+            onClick={() => viewerRef.current?.setZoom(ZoomMode.AUTO)}
+          />
+          <DialButton
+            label="Fit Page zoom"
+            variant={ButtonVariant.Secondary}
+            onClick={() => viewerRef.current?.setZoom(ZoomMode.PAGE_FIT)}
           />
           <DialButton
             label="Reset zoom"

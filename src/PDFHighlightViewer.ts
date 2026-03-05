@@ -10,6 +10,8 @@ import {
   InputHighlightData,
   HighlightsIndex,
   HighlightStyle,
+  ZoomValue,
+  ZoomMode,
 } from './types';
 import { PDFEngine } from './core/pdf-engine';
 import { ViewportManager } from './core/viewport-manager';
@@ -17,6 +19,9 @@ import { UnifiedLayerBuilder } from './core/unified-layer-builder';
 import { UnifiedInteractionHandler, InteractionCallbacks } from './core/interaction-handler';
 import { PerformanceOptimizer } from './core/performance-optimizer';
 import { buildHighlightsIndex } from './utils/highlight-adapter';
+
+const CONTAINER_PADDING = 40;
+const ZOOM_STEP = 1.2;
 
 export class PDFHighlightViewer implements IPDFHighlightViewer {
   private pdfEngine: PDFEngine;
@@ -439,11 +444,11 @@ export class PDFHighlightViewer implements IPDFHighlightViewer {
         break;
       case '+':
       case '=':
-        this.setZoom(this.currentScale * 1.2);
+        this.setZoom(this.currentScale * ZOOM_STEP);
         event.preventDefault();
         break;
       case '-':
-        this.setZoom(this.currentScale / 1.2);
+        this.setZoom(this.currentScale / ZOOM_STEP);
         event.preventDefault();
         break;
     }
@@ -646,7 +651,17 @@ export class PDFHighlightViewer implements IPDFHighlightViewer {
     return this.currentScale;
   }
 
-  setZoom(scale: number): void {
+  setZoom(value: ZoomValue): void {
+    if (value === ZoomMode.AUTO) {
+      void this.setAutoZoom();
+    } else if (value === ZoomMode.PAGE_FIT) {
+      void this.setPageFitZoom();
+    } else {
+      this.applyZoom(value);
+    }
+  }
+
+  private applyZoom(scale: number): void {
     const previousScale = this.currentScale;
     this.currentScale = Math.max(0.5, Math.min(5.0, scale));
 
@@ -656,16 +671,37 @@ export class PDFHighlightViewer implements IPDFHighlightViewer {
     this.emit('zoomChanged', { scale: this.currentScale, previousScale });
   }
 
+  private async setAutoZoom(): Promise<void> {
+    const scales = await this.computeFitScales();
+    this.applyZoom(scales.scaleX);
+  }
+
+  private async setPageFitZoom(): Promise<void> {
+    const scales = await this.computeFitScales();
+    this.applyZoom(Math.min(scales.scaleX, scales.scaleY));
+  }
+
+  private async computeFitScales(): Promise<{ scaleX: number; scaleY: number }> {
+    if (!this.container) {
+      return { scaleX: 1, scaleY: 1 };
+    }
+    const page = await this.pdfEngine.getPage(this.currentPage || 1);
+    const viewport = page.getViewport({ scale: 1 });
+    const scaleX = (this.container.clientWidth - CONTAINER_PADDING) / viewport.width;
+    const scaleY = (this.container.clientHeight - CONTAINER_PADDING) / viewport.height;
+    return { scaleX, scaleY };
+  }
+
   zoomIn(): void {
-    this.setZoom(this.currentScale * 1.2);
+    this.applyZoom(this.currentScale * ZOOM_STEP);
   }
 
   zoomOut(): void {
-    this.setZoom(this.currentScale / 1.2);
+    this.applyZoom(this.currentScale / ZOOM_STEP);
   }
 
   resetZoom(): void {
-    this.setZoom(1.5);
+    this.applyZoom(1.5);
   }
 
   getCurrentPage(): number {
