@@ -110,7 +110,7 @@ export interface HighlightLabelStyle {
   fontWeight?: string | number;
   border?: string;
   whiteSpace?: string;
-  iconSize?: string | number;  // size for beforeIcon (e.g. 14 or '14px')
+  iconSize?: string | number; // size for beforeIcon (e.g. 14 or '14px')
 }
 
 export interface InputHighlightData {
@@ -118,7 +118,7 @@ export interface InputHighlightData {
   bboxes: BBox[];
   style?: HighlightStyle;
   label?: string;
-  beforeIcon?: string;  // inline SVG string (trusted content only, e.g. Tabler icons)
+  beforeIcon?: string; // inline SVG string (trusted content only, e.g. Tabler icons)
   labelStyle?: HighlightLabelStyle;
   tooltipText?: string;
   metadata?: Record<string, any>;
@@ -309,7 +309,8 @@ Pass an inline SVG string as `beforeIcon` to show an icon inside the label frame
 
 ```ts
 // Inline SVG string (e.g. from Tabler: import icon from '@tabler/icons/icons/outline/alert-circle.svg?raw')
-const alertIconSvg = '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 8v4"/><path d="M12 16h.01"/><circle cx="12" cy="12" r="10"/></svg>';
+const alertIconSvg =
+  '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 8v4"/><path d="M12 16h.01"/><circle cx="12" cy="12" r="10"/></svg>';
 
 const highlight: InputHighlightData = {
   id: 'alert-001',
