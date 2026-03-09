@@ -17,9 +17,9 @@ const initialHighlights: InputHighlightData[] = [
     beforeIcon: ICON_ALERT_CIRCLE_SVG,
     labelStyle: {
       fontSize: 10,
-      border: '1px solid rgba(255, 107, 107, 0.55)',
       padding: '2px 4px',
       iconSize: 14,
+      iconColor: '#ff6b6b',
     },
     tooltipText: 'Red highlight zone',
   },

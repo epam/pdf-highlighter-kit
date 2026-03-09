@@ -7,6 +7,8 @@ import {
   HighlightStyle,
   HighlightLabelStyle,
 } from '../types';
+import { applyLabelStyle, applyIconStyle, normalizeSize } from '../utils/label-style';
+import { sanitizeIconHtml } from '../utils/sanitize-icon-html';
 
 interface ItemHighlight {
   termId: string;
@@ -226,26 +228,22 @@ export class UnifiedLayerBuilder {
       labelEl.style.alignItems = 'center';
       labelEl.style.gap = '4px';
       this.applyDefaultLabelStyle(labelEl, segment.highlightInfo.style);
-      this.applyLabelStyle(labelEl, segment.highlightInfo.labelStyle);
+      applyLabelStyle(labelEl, segment.highlightInfo.labelStyle);
 
       if (segment.highlightInfo.beforeIcon) {
         const iconWrap = document.createElement('span');
         iconWrap.className = 'highlight-label-icon';
-        iconWrap.innerHTML = segment.highlightInfo.beforeIcon;
+        iconWrap.innerHTML = sanitizeIconHtml(segment.highlightInfo.beforeIcon);
         const svg = iconWrap.querySelector('svg');
         if (svg) {
           svg.removeAttribute('width');
           svg.removeAttribute('height');
         }
         const iconSize = segment.highlightInfo.labelStyle?.iconSize;
-        const size =
-          iconSize != null
-            ? typeof iconSize === 'number'
-              ? `${iconSize}px`
-              : String(iconSize)
-            : '1em';
+        const size = normalizeSize(iconSize);
         iconWrap.style.width = size;
         iconWrap.style.height = size;
+        applyIconStyle(iconWrap, segment.highlightInfo.labelStyle);
         labelEl.appendChild(iconWrap);
       }
       if (segment.highlightInfo.label) {
@@ -293,22 +291,8 @@ export class UnifiedLayerBuilder {
 
   private applyDefaultLabelStyle(el: HTMLElement, highlightStyle?: HighlightStyle): void {
     const color = highlightStyle?.borderColor ?? highlightStyle?.backgroundColor ?? '#666666';
+    el.style.color = color;
     el.style.border = `1px solid ${color}`;
-  }
-
-  private applyLabelStyle(el: HTMLElement, style?: HighlightLabelStyle): void {
-    if (!style) return;
-    if (style.fontSize != null)
-      el.style.fontSize =
-        typeof style.fontSize === 'number' ? `${style.fontSize}px` : String(style.fontSize);
-    if (style.color != null) el.style.color = style.color;
-    if (style.backgroundColor != null) el.style.backgroundColor = style.backgroundColor;
-    if (style.padding != null) el.style.padding = style.padding;
-    if (style.borderRadius != null) el.style.borderRadius = style.borderRadius;
-    if (style.fontFamily != null) el.style.fontFamily = style.fontFamily;
-    if (style.fontWeight != null) el.style.fontWeight = String(style.fontWeight);
-    if (style.border != null) el.style.border = style.border;
-    if (style.whiteSpace != null) el.style.whiteSpace = style.whiteSpace;
   }
 
   private applyInlineHighlightStyle(el: HTMLElement, style?: HighlightStyle): void {

@@ -19,6 +19,8 @@ import { UnifiedLayerBuilder } from './core/unified-layer-builder';
 import { UnifiedInteractionHandler, InteractionCallbacks } from './core/interaction-handler';
 import { PerformanceOptimizer } from './core/performance-optimizer';
 import { buildHighlightsIndex } from './utils/highlight-adapter';
+import { applyLabelStyle, applyIconStyle, normalizeSize } from './utils/label-style';
+import { sanitizeIconHtml } from './utils/sanitize-icon-html';
 
 const CONTAINER_PADDING = 40;
 const ZOOM_STEP = 1.2;
@@ -1445,29 +1447,41 @@ export class PDFHighlightViewer implements IPDFHighlightViewer {
               ? style.hoverOpacity
               : Math.min(0.6, effectiveOpacity + 0.2);
 
+          const labelColor = style?.borderColor ?? style?.backgroundColor ?? '#666666';
+
           highlightDiv.addEventListener('mouseenter', () => {
             if (this.options.highlightsConfig?.enableMultilineHover) {
-              const same = highlightLayer.querySelectorAll(`[data-term-id="${highlight.id}"]`);
+              const same = highlightLayer.querySelectorAll(
+                `.highlight[data-term-id="${highlight.id}"]`
+              );
               same.forEach((el) => ((el as HTMLDivElement).style.opacity = String(hoverOpacity)));
 
               const other = highlightLayer.querySelectorAll(
-                `div[data-term-id]:not([data-term-id="${highlight.id}"])`
+                `.highlight[data-term-id]:not([data-term-id="${highlight.id}"])`
               );
               other.forEach((el) => ((el as HTMLDivElement).style.opacity = '0.1'));
             } else {
               highlightDiv.style.opacity = String(hoverOpacity);
             }
+            const labelEl = highlightDiv.querySelector<HTMLElement>('.highlight-label');
+            if (labelEl) {
+              labelEl.style.borderColor = borderColor;
+            }
           });
 
           highlightDiv.addEventListener('mouseleave', () => {
             if (this.options.highlightsConfig?.enableMultilineHover) {
-              const all = highlightLayer.querySelectorAll(`div[data-term-id]`);
+              const all = highlightLayer.querySelectorAll('.highlight[data-term-id]');
               all.forEach((el) => {
                 const original = (el as HTMLDivElement).dataset.originalOpacity ?? '0.3';
                 (el as HTMLDivElement).style.opacity = original;
               });
             } else {
               highlightDiv.style.opacity = highlightDiv.dataset.originalOpacity ?? '0.3';
+            }
+            const labelEl = highlightDiv.querySelector<HTMLElement>('.highlight-label');
+            if (labelEl) {
+              labelEl.style.borderColor = labelColor;
             }
           });
 
@@ -1478,9 +1492,9 @@ export class PDFHighlightViewer implements IPDFHighlightViewer {
             labelEl.className = 'highlight-label';
             labelEl.setAttribute('data-term-id', highlight.id);
             labelEl.style.position = 'absolute';
-            labelEl.style.left = `${bbox.x1 * scale}px`;
+            labelEl.style.left = '0';
             labelEl.style.transform = 'translateX(-100%)';
-            labelEl.style.top = `${top}px`;
+            labelEl.style.top = '-1px';
             labelEl.style.display = 'flex';
             labelEl.style.alignItems = 'center';
             labelEl.style.justifyContent = 'flex-end';
@@ -1489,49 +1503,31 @@ export class PDFHighlightViewer implements IPDFHighlightViewer {
             labelEl.style.cursor = 'pointer';
             labelEl.style.whiteSpace = 'nowrap';
 
-            const labelColor = style?.borderColor ?? style?.backgroundColor ?? '#666666';
             labelEl.style.border = `1px solid ${labelColor}`;
 
-            const ls = highlight.labelStyle;
-            if (ls) {
-              if (ls.fontSize != null)
-                labelEl.style.fontSize =
-                  typeof ls.fontSize === 'number' ? `${ls.fontSize}px` : String(ls.fontSize);
-              if (ls.color != null) labelEl.style.color = ls.color;
-              if (ls.backgroundColor != null) labelEl.style.backgroundColor = ls.backgroundColor;
-              if (ls.padding != null) labelEl.style.padding = ls.padding;
-              if (ls.borderRadius != null) labelEl.style.borderRadius = ls.borderRadius;
-              if (ls.fontFamily != null) labelEl.style.fontFamily = ls.fontFamily;
-              if (ls.fontWeight != null) labelEl.style.fontWeight = String(ls.fontWeight);
-              if (ls.border != null) labelEl.style.border = ls.border;
-              if (ls.whiteSpace != null) labelEl.style.whiteSpace = ls.whiteSpace;
-            }
+            applyLabelStyle(labelEl, highlight.labelStyle);
 
             if (highlight.beforeIcon) {
               const iconWrap = document.createElement('span');
               iconWrap.className = 'highlight-label-icon';
-              iconWrap.innerHTML = highlight.beforeIcon;
+              iconWrap.innerHTML = sanitizeIconHtml(highlight.beforeIcon);
               const svg = iconWrap.querySelector('svg');
               if (svg) {
                 svg.removeAttribute('width');
                 svg.removeAttribute('height');
               }
-              const iconSize = ls?.iconSize;
-              const size =
-                iconSize != null
-                  ? typeof iconSize === 'number'
-                    ? `${iconSize}px`
-                    : String(iconSize)
-                  : '1em';
+              const iconSize = highlight.labelStyle?.iconSize;
+              const size = normalizeSize(iconSize);
               iconWrap.style.width = size;
               iconWrap.style.height = size;
+              applyIconStyle(iconWrap, highlight.labelStyle);
               labelEl.appendChild(iconWrap);
             }
             if (highlight.label) {
               labelEl.appendChild(document.createTextNode(highlight.label));
             }
 
-            highlightLayer.appendChild(labelEl);
+            highlightDiv.appendChild(labelEl);
           }
         }
       }

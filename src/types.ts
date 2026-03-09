@@ -43,6 +43,8 @@ export interface HighlightLabelStyle {
   whiteSpace?: string;
   /** Size for the icon before the label (e.g. '14px', 16). Used when beforeIcon is set. */
   iconSize?: string | number;
+  /** Color for the icon (CSS value). Used for stroke/currentColor of the SVG when beforeIcon is set. */
+  iconColor?: string;
 }
 
 export interface InputHighlightData {

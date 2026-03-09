@@ -78,9 +78,9 @@ viewer.goToHighlight('term-001', 0);
 
 Each highlight carries its own style. No categories are required.
 
-**Labels:** You can add an optional `label` that is displayed to the left of the highlight, flush against it. By default the label uses the highlight’s color (from `style.borderColor` or `style.backgroundColor`), `border: 1px solid`, and `padding: 2px 4px`. Override any of these with `labelStyle` (e.g. `fontSize`, `color`, `padding`, `border`).
+**Labels:** You can add an optional `label` that is displayed to the left of the highlight, flush against it. By default the label uses the highlight’s color (from `style.borderColor` or `style.backgroundColor`), `border: 1px solid`, and `padding: 2px 4px`. Override any of these with `labelStyle` (e.g. `fontSize`, `color`, `padding`, `border`). To hide the label border, set `labelStyle: { border: 'none' }` (the default border is always applied unless overridden).
 
-**Icon before label:** Optionally set `beforeIcon` to an inline SVG string (e.g. from [Tabler Icons](https://tabler.io/icons)) to render an icon inside the label frame, to the left of the text. The icon inherits the label color via `currentColor`. Use `labelStyle.iconSize` to set the icon size (e.g. `14` or `'14px'`). Only pass trusted SVG content (e.g. from your bundle or `@tabler/icons`); in React with Vite you can use `import iconSvg from '@tabler/icons/icons/outline/alert-circle.svg?raw'` and pass `iconSvg` as `beforeIcon`.
+**Icon before label:** Optionally set `beforeIcon` to an inline SVG string (e.g. from [Tabler Icons](https://tabler.io/icons)) to render an icon inside the label frame, to the left of the text. The icon inherits the label color via `currentColor`. Use `labelStyle.iconSize` to set the icon size (e.g. `14` or `'14px'`) and `labelStyle.iconColor` to set the icon color (e.g. `'#ff6b6b'`); if `iconColor` is not set, the icon uses the label text color. Only pass trusted SVG content (e.g. from your bundle or `@tabler/icons`); in React with Vite you can use `import iconSvg from '@tabler/icons/icons/outline/alert-circle.svg?raw'` and pass `iconSvg` as `beforeIcon`.
 
 ```ts
 export interface BBox {
