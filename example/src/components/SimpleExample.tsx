@@ -368,7 +368,7 @@ export const SimpleExample: React.FC = () => {
 
   // Load thumbnails when panel is opened
   useEffect(() => {
-    if (!viewerRef.current || totalPages == null || totalPages < 1) {
+    if (!showThumbnailsPanel || !viewerRef.current || totalPages == null || totalPages < 1) {
       return;
     }
 
@@ -473,6 +473,7 @@ export const SimpleExample: React.FC = () => {
                         type="radio"
                         value={pageNum}
                         checked={currentPage === pageNum}
+                        readOnly
                         style={{
                           position: 'absolute',
                           top: 0,

@@ -9,6 +9,7 @@ import {
   InputHighlightData,
   HighlightStyle,
   ZoomValue,
+  ThumbnailOptions,
 } from './types';
 
 export interface PDFHighlightViewer {
@@ -30,17 +31,12 @@ export interface PDFHighlightViewer {
 
   getThumbnails(
     pageNumbers: number[],
-    options?: { maxWidth?: number; scale?: number }
+    options?: ThumbnailOptions
   ): Promise<Map<number, HTMLCanvasElement>>;
 
   getThumbnailsDataUrl(
     pageNumbers: number[],
-    options?: {
-      maxWidth?: number;
-      scale?: number;
-      format?: 'image/jpeg' | 'image/webp' | 'image/png';
-      quality?: number;
-    }
+    options?: ThumbnailOptions
   ): Promise<Map<number, string>>;
 
   loadHighlights(data: InputHighlightData[]): void;

@@ -261,7 +261,7 @@ export interface ViewerOptions {
 export interface ThumbnailOptions {
   maxWidth?: number;
   scale?: number;
-  /** Image format for data URL (used by getThumbnailsDataUrl). Default 'jpeg'. */
+  /** Image format for data URL (used by getThumbnailsDataUrl). Default 'image/webp'. */
   format?: 'image/jpeg' | 'image/webp' | 'image/png';
   /** Quality for jpeg/webp (0–1). Used by getThumbnailsDataUrl. Default 0.85. */
   quality?: number;

@@ -34,8 +34,13 @@ export class PDFEngine {
   private pageRenderCallback: ((pageNumber: number) => Promise<void>) | null = null;
   private maxPoolSize = 10;
 
-  private thumbnailCache = new Map<number, HTMLCanvasElement>();
+  private thumbnailCache = new Map<string, HTMLCanvasElement>();
   private static readonly THUMBNAIL_DEFAULT_SCALE = 0.2;
+  private static readonly THUMBNAIL_RENDER_CONCURRENCY = 3;
+
+  private static getThumbnailCacheKey(pageNumber: number, scale: number): string {
+    return `${pageNumber}:${scale.toFixed(4)}`;
+  }
 
   constructor(private options: ViewerOptions = {}) {
     this.initializeCanvasPool();
@@ -332,17 +337,19 @@ export class PDFEngine {
       throw new Error(`Page ${pageNumber} not found`);
     }
 
-    const cached = this.thumbnailCache.get(pageNumber);
+    const page = await this.getPage(pageNumber);
+    let scale = options?.scale ?? PDFEngine.THUMBNAIL_DEFAULT_SCALE;
+    if (options?.maxWidth != null && options.maxWidth > 0) {
+      const baseViewport = page.getViewport({ scale: 1 });
+      scale = options.maxWidth / baseViewport.width;
+    }
+
+    const cacheKey = PDFEngine.getThumbnailCacheKey(pageNumber, scale);
+    const cached = this.thumbnailCache.get(cacheKey);
     if (cached) {
       return cached;
     }
 
-    const page = await this.getPage(pageNumber);
-    let scale = options?.scale ?? PDFEngine.THUMBNAIL_DEFAULT_SCALE;
-    if (options?.maxWidth != null && options.maxWidth > 0) {
-      const viewportAt1 = page.getViewport({ scale: 1 });
-      scale = options.maxWidth / viewportAt1.width;
-    }
     const viewport = page.getViewport({ scale });
 
     const canvas = document.createElement('canvas');
@@ -359,7 +366,7 @@ export class PDFEngine {
       canvas,
     }).promise;
 
-    this.thumbnailCache.set(pageNumber, canvas);
+    this.thumbnailCache.set(cacheKey, canvas);
     return canvas;
   }
 
@@ -368,7 +375,7 @@ export class PDFEngine {
     options?: ThumbnailOptions
   ): Promise<Map<number, HTMLCanvasElement>> {
     const result = new Map<number, HTMLCanvasElement>();
-    const concurrency = 3;
+    const concurrency = PDFEngine.THUMBNAIL_RENDER_CONCURRENCY;
     const queue = [...pageNumbers];
 
     const worker = async (): Promise<void> => {
