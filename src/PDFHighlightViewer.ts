@@ -1576,6 +1576,15 @@ export class PDFHighlightViewer implements IPDFHighlightViewer {
   private getHighlightStyle(termId: string): HighlightStyle | undefined {
     return this.getHighlightById(termId)?.style;
   }
+
+  private getHighlightElements(root: ParentNode, termId?: string): HTMLElement[] {
+    const selector = termId
+      ? `.highlight[data-term-id="${termId}"], .highlight-wrapper[data-term-id="${termId}"]`
+      : '.highlight, .highlight-wrapper';
+
+    return Array.from(root.querySelectorAll<HTMLElement>(selector));
+  }
+
   /**
    * Update highlights colors for specified page
    * */
@@ -1686,10 +1695,10 @@ export class PDFHighlightViewer implements IPDFHighlightViewer {
     this.selectedTermId = termId;
 
     // Remove previous selection highlighting
-    this.clearSelectedTermHighlighting();
+    this.clearSelectedTermHighlighting(false);
 
     // Add selected class to all instances of this term
-    const termElements = this.container.querySelectorAll(`[data-term-id="${termId}"]`);
+    const termElements = this.getHighlightElements(this.container, termId);
 
     termElements.forEach((element) => {
       element.classList.add('selected-term');
@@ -1707,7 +1716,7 @@ export class PDFHighlightViewer implements IPDFHighlightViewer {
     });
 
     // Also dim all other highlights
-    const allHighlights = this.container.querySelectorAll('.highlight, .highlight-wrapper');
+    const allHighlights = this.getHighlightElements(this.container);
 
     allHighlights.forEach((element) => {
       const elementTermId = element.getAttribute('data-term-id');
@@ -1726,13 +1735,16 @@ export class PDFHighlightViewer implements IPDFHighlightViewer {
   /**
    * Clear selected term highlighting
    */
-  clearSelectedTermHighlighting(): void {
+  clearSelectedTermHighlighting(clearStoredSelection = true): void {
     if (!this.container) return;
 
-    // Clear the selected term ID
-    this.selectedTermId = null;
+    if (clearStoredSelection) {
+      this.selectedTermId = null;
+    }
 
-    const selectedElements = this.container.querySelectorAll('.selected-term');
+    const selectedElements = this.container.querySelectorAll(
+      '.highlight.selected-term, .highlight-wrapper.selected-term'
+    );
     selectedElements.forEach((element) => {
       element.classList.remove('selected-term');
 
@@ -1745,7 +1757,9 @@ export class PDFHighlightViewer implements IPDFHighlightViewer {
       // Keep original opacity as it was set by the original rendering
     });
 
-    const dimmedElements = this.container.querySelectorAll('.dimmed-highlight');
+    const dimmedElements = this.container.querySelectorAll(
+      '.highlight.dimmed-highlight, .highlight-wrapper.dimmed-highlight'
+    );
     dimmedElements.forEach((element) => {
       element.classList.remove('dimmed-highlight');
 
