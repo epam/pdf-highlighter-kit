@@ -1,4 +1,10 @@
-import { HighlightStyle, InputHighlightData, PDFHighlightViewer, ZoomMode } from '../../../src';
+import {
+  BBoxOrigin,
+  HighlightStyle,
+  InputHighlightData,
+  PDFHighlightViewer,
+  ZoomMode,
+} from '../../../src';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ButtonVariant, DialButton, DialDropdown } from '@epam/ai-dial-ui-kit';
 import '@epam/ai-dial-ui-kit/styles.css';
@@ -75,6 +81,7 @@ export const SimpleExample: React.FC = () => {
   const [enableVirtualScrolling, setEnableVirtualScrolling] = useState(false);
   const [enableMultilineHover, setEnableMultilineHover] = useState(false);
   const [performanceMode, setPerformanceMode] = useState(false);
+  const [bboxOrigin, setBBoxOrigin] = useState<BBoxOrigin>('top-left');
 
   // Debug state (from events)
   const [totalPages, setTotalPages] = useState<number | null>(null);
@@ -119,8 +126,9 @@ export const SimpleExample: React.FC = () => {
       enableVirtualScrolling,
       enableMultilineHover,
       performanceMode,
+      bboxOrigin,
     });
-  }, [enableMultilineHover, enableVirtualScrolling, performanceMode, pushEvent]);
+  }, [bboxOrigin, enableMultilineHover, enableVirtualScrolling, performanceMode, pushEvent]);
 
   const goTo = useCallback((id: string) => viewerRef.current?.goToHighlight(id), []);
 
@@ -263,6 +271,21 @@ export const SimpleExample: React.FC = () => {
     pushEvent('ui.jumpToPage3Coord', { page: 3, x: 0, y: 10 });
   }, [pushEvent]);
 
+  const onBBoxOriginChange = useCallback(
+    (nextOrigin: BBoxOrigin) => {
+      setBBoxOrigin(nextOrigin);
+
+      const viewer = viewerRef.current as any;
+      if (!viewer) return;
+
+      viewer.options = { ...(viewer.options ?? {}), bboxOrigin: nextOrigin };
+      viewer.loadHighlights(highlights);
+
+      pushEvent('ui.bboxOriginChanged', { bboxOrigin: nextOrigin, applied: true });
+    },
+    [highlights, pushEvent]
+  );
+
   useEffect(() => {
     if (!containerRef.current) return;
 
@@ -277,6 +300,7 @@ export const SimpleExample: React.FC = () => {
           enableTextSelection: true,
           enableVirtualScrolling,
           performanceMode,
+          bboxOrigin,
           highlightsConfig: {
             enableMultilineHover,
           },
@@ -649,6 +673,35 @@ export const SimpleExample: React.FC = () => {
             performance mode
           </label>
 
+          <label style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+            bbox origin
+            <select
+              value={bboxOrigin}
+              onChange={(e) => onBBoxOriginChange(e.target.value as BBoxOrigin)}
+              style={{
+                background: 'rgba(255,255,255,0.08)',
+                color: '#ffffff',
+                border: '1px solid rgba(255,255,255,0.25)',
+                borderRadius: 6,
+                padding: '4px 8px',
+                height: 30,
+              }}
+            >
+              <option value="bottom-right" style={{ background: '#23252a', color: '#ffffff' }}>
+                bottom-right
+              </option>
+              <option value="bottom-left" style={{ background: '#23252a', color: '#ffffff' }}>
+                bottom-left
+              </option>
+              <option value="top-right" style={{ background: '#23252a', color: '#ffffff' }}>
+                top-right
+              </option>
+              <option value="top-left" style={{ background: '#23252a', color: '#ffffff' }}>
+                top-left
+              </option>
+            </select>
+          </label>
+
           <div style={{ fontFamily: 'monospace', fontSize: 12, opacity: 0.8 }}>
             page: <b>{currentPage}</b>
             {totalPages ? (
@@ -668,7 +721,7 @@ export const SimpleExample: React.FC = () => {
         </div>
 
         <div style={{ fontSize: 12, opacity: 0.75, marginTop: 4 }}>
-          Note: changing checkboxes requires <b>Reinit</b> to apply.
+          Note: bbox origin applies immediately; other options require <b>Reinit</b>.
         </div>
       </div>
 
