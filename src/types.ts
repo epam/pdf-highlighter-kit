@@ -31,10 +31,30 @@ export interface HighlightStyle {
   pulseAnimation?: boolean;
 }
 
+export interface HighlightLabelStyle {
+  fontSize?: string | number;
+  color?: string;
+  backgroundColor?: string;
+  padding?: string;
+  borderRadius?: string;
+  fontFamily?: string;
+  fontWeight?: string | number;
+  border?: string;
+  whiteSpace?: string;
+  /** Size for the icon before the label (e.g. '14px', 16). Used when beforeIcon is set. */
+  iconSize?: string | number;
+  /** Color for the icon (CSS value). Used for stroke/currentColor of the SVG when beforeIcon is set. */
+  iconColor?: string;
+}
+
 export interface InputHighlightData {
   id: string;
   bboxes: BBox[];
   style?: HighlightStyle;
+  label?: string;
+  /** Inline SVG string (e.g. from Tabler) to render before the label inside the label frame. Use trusted content only. */
+  beforeIcon?: string;
+  labelStyle?: HighlightLabelStyle;
   tooltipText?: string;
   metadata?: Record<string, any>;
 }
@@ -100,6 +120,9 @@ export interface Segment {
   highlightInfo?: {
     termId: string;
     style?: HighlightStyle;
+    label?: string;
+    beforeIcon?: string;
+    labelStyle?: HighlightLabelStyle;
   };
   transform: number[];
   fontName: string;

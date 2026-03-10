@@ -93,6 +93,45 @@
   transform: scale(1.02);
 }
 
+.highlight-label {
+  display: flex;
+  align-items: center;
+  border: 1px solid transparent;
+  padding: 2px 4px;
+  font-size: 12px;
+  line-height: 1.2;
+  white-space: nowrap;
+  flex-shrink: 0;
+  box-sizing: border-box;
+}
+
+.highlight-label-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  box-sizing: border-box;
+}
+
+.highlight-label-icon svg {
+  width: 100% !important;
+  height: 100% !important;
+  max-width: 100%;
+  max-height: 100%;
+  display: block;
+  color: inherit;
+  fill: none;
+  stroke: currentColor;
+  flex-shrink: 0;
+}
+
+.unified-layer .highlight-label {
+  margin-right: 0;
+}
+
 .protein-highlight .highlight-background {
   background: rgba(255, 200, 0, 0.3);
   border: 1px solid rgba(255, 180, 0, 0.6);

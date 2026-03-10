@@ -5,12 +5,18 @@ import {
   TextItem,
   InputHighlightData,
   HighlightStyle,
+  HighlightLabelStyle,
 } from '../types';
+import { applyLabelStyle, applyIconStyle, normalizeSize } from '../utils/label-style';
+import { sanitizeIconHtml } from '../utils/sanitize-icon-html';
 
 interface ItemHighlight {
   termId: string;
   coordinates: BoundingBox;
   style?: HighlightStyle;
+  label?: string;
+  beforeIcon?: string;
+  labelStyle?: HighlightLabelStyle;
 }
 
 export class UnifiedLayerBuilder {
@@ -62,6 +68,9 @@ export class UnifiedLayerBuilder {
         out.push({
           termId: h.id,
           style: h.style,
+          label: h.label,
+          beforeIcon: h.beforeIcon,
+          labelStyle: h.labelStyle,
           coordinates: { x1: b.x1, y1: b.y1, x2: b.x2, y2: b.y2 },
         });
       }
@@ -125,6 +134,9 @@ export class UnifiedLayerBuilder {
       highlightInfo: {
         termId: primary.termId,
         style: primary.style,
+        label: primary.label,
+        beforeIcon: primary.beforeIcon,
+        labelStyle: primary.labelStyle,
       },
       transform: textItem.transform,
       fontName: textItem.fontName,
@@ -208,7 +220,43 @@ export class UnifiedLayerBuilder {
     wrapper.className = 'highlight-wrapper';
     wrapper.setAttribute('data-term-id', segment.highlightInfo?.termId || '');
 
-    // Background (visual highlight)
+    // Label first (left of highlight), then inner container: background + text
+    if (segment.highlightInfo?.label || segment.highlightInfo?.beforeIcon) {
+      const labelEl = document.createElement('span');
+      labelEl.className = 'highlight-label';
+      labelEl.style.display = 'inline-flex';
+      labelEl.style.alignItems = 'center';
+      labelEl.style.gap = '4px';
+      this.applyDefaultLabelStyle(labelEl, segment.highlightInfo.style);
+      applyLabelStyle(labelEl, segment.highlightInfo.labelStyle);
+
+      if (segment.highlightInfo.beforeIcon) {
+        const iconWrap = document.createElement('span');
+        iconWrap.className = 'highlight-label-icon';
+        iconWrap.innerHTML = sanitizeIconHtml(segment.highlightInfo.beforeIcon);
+        const svg = iconWrap.querySelector('svg');
+        if (svg) {
+          svg.removeAttribute('width');
+          svg.removeAttribute('height');
+        }
+        const iconSize = segment.highlightInfo.labelStyle?.iconSize;
+        const size = normalizeSize(iconSize);
+        iconWrap.style.width = size;
+        iconWrap.style.height = size;
+        applyIconStyle(iconWrap, segment.highlightInfo.labelStyle);
+        labelEl.appendChild(iconWrap);
+      }
+      if (segment.highlightInfo.label) {
+        const textNode = document.createTextNode(segment.highlightInfo.label);
+        labelEl.appendChild(textNode);
+      }
+      wrapper.appendChild(labelEl);
+    }
+
+    const inner = document.createElement('span');
+    inner.style.position = 'relative';
+    inner.style.display = 'inline';
+
     const background = document.createElement('span');
     background.className = 'highlight-background';
     background.style.position = 'absolute';
@@ -224,16 +272,27 @@ export class UnifiedLayerBuilder {
     textSpan.style.position = 'relative';
     textSpan.style.zIndex = '1';
 
-    wrapper.appendChild(background);
-    wrapper.appendChild(textSpan);
+    inner.appendChild(background);
+    inner.appendChild(textSpan);
+    wrapper.appendChild(inner);
+
+    wrapper.style.display = 'inline-flex';
+    wrapper.style.alignItems = 'baseline';
+    wrapper.style.gap = '0';
 
     this.applyInlineHighlightStyle(background, segment.highlightInfo?.style);
 
     this.applyTextPositioning(wrapper, segment, scale);
-    wrapper.style.position = 'absolute'; // ensure background absolute positioning works
+    wrapper.style.position = 'absolute';
     wrapper.style.userSelect = 'text';
 
     return wrapper;
+  }
+
+  private applyDefaultLabelStyle(el: HTMLElement, highlightStyle?: HighlightStyle): void {
+    const color = highlightStyle?.borderColor ?? highlightStyle?.backgroundColor ?? '#666666';
+    el.style.color = color;
+    el.style.border = `1px solid ${color}`;
   }
 
   private applyInlineHighlightStyle(el: HTMLElement, style?: HighlightStyle): void {

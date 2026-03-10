@@ -20,6 +20,8 @@ import { UnifiedLayerBuilder } from './core/unified-layer-builder';
 import { UnifiedInteractionHandler, InteractionCallbacks } from './core/interaction-handler';
 import { PerformanceOptimizer } from './core/performance-optimizer';
 import { buildHighlightsIndex } from './utils/highlight-adapter';
+import { applyLabelStyle, applyIconStyle, normalizeSize } from './utils/label-style';
+import { sanitizeIconHtml } from './utils/sanitize-icon-html';
 
 const CONTAINER_PADDING = 40;
 const ZOOM_STEP = 1.2;
@@ -1466,23 +1468,31 @@ export class PDFHighlightViewer implements IPDFHighlightViewer {
               ? style.hoverOpacity
               : Math.min(0.6, effectiveOpacity + 0.2);
 
+          const labelColor = style?.borderColor ?? style?.backgroundColor ?? '#666666';
+
           highlightDiv.addEventListener('mouseenter', () => {
             if (this.options.highlightsConfig?.enableMultilineHover) {
-              const same = highlightLayer.querySelectorAll(`[data-term-id="${highlight.id}"]`);
+              const same = highlightLayer.querySelectorAll(
+                `.highlight[data-term-id="${highlight.id}"]`
+              );
               same.forEach((el) => ((el as HTMLDivElement).style.opacity = String(hoverOpacity)));
 
               const other = highlightLayer.querySelectorAll(
-                `div[data-term-id]:not([data-term-id="${highlight.id}"])`
+                `.highlight[data-term-id]:not([data-term-id="${highlight.id}"])`
               );
               other.forEach((el) => ((el as HTMLDivElement).style.opacity = '0.1'));
             } else {
               highlightDiv.style.opacity = String(hoverOpacity);
             }
+            const labelEl = highlightDiv.querySelector<HTMLElement>('.highlight-label');
+            if (labelEl) {
+              labelEl.style.borderColor = borderColor;
+            }
           });
 
           highlightDiv.addEventListener('mouseleave', () => {
             if (this.options.highlightsConfig?.enableMultilineHover) {
-              const all = highlightLayer.querySelectorAll(`div[data-term-id]`);
+              const all = highlightLayer.querySelectorAll('.highlight[data-term-id]');
               all.forEach((el) => {
                 const original = (el as HTMLDivElement).dataset.originalOpacity ?? '0.3';
                 (el as HTMLDivElement).style.opacity = original;
@@ -1490,9 +1500,56 @@ export class PDFHighlightViewer implements IPDFHighlightViewer {
             } else {
               highlightDiv.style.opacity = highlightDiv.dataset.originalOpacity ?? '0.3';
             }
+            const labelEl = highlightDiv.querySelector<HTMLElement>('.highlight-label');
+            if (labelEl) {
+              labelEl.style.borderColor = labelColor;
+            }
           });
 
           highlightLayer.appendChild(highlightDiv);
+
+          if (highlight.label || highlight.beforeIcon) {
+            const labelEl = document.createElement('span');
+            labelEl.className = 'highlight-label';
+            labelEl.setAttribute('data-term-id', highlight.id);
+            labelEl.style.position = 'absolute';
+            labelEl.style.left = '0';
+            labelEl.style.transform = 'translateX(-100%)';
+            labelEl.style.top = '-1px';
+            labelEl.style.display = 'flex';
+            labelEl.style.alignItems = 'center';
+            labelEl.style.justifyContent = 'flex-end';
+            labelEl.style.gap = '4px';
+            labelEl.style.pointerEvents = 'auto';
+            labelEl.style.cursor = 'pointer';
+            labelEl.style.whiteSpace = 'nowrap';
+
+            labelEl.style.border = `1px solid ${labelColor}`;
+
+            applyLabelStyle(labelEl, highlight.labelStyle);
+
+            if (highlight.beforeIcon) {
+              const iconWrap = document.createElement('span');
+              iconWrap.className = 'highlight-label-icon';
+              iconWrap.innerHTML = sanitizeIconHtml(highlight.beforeIcon);
+              const svg = iconWrap.querySelector('svg');
+              if (svg) {
+                svg.removeAttribute('width');
+                svg.removeAttribute('height');
+              }
+              const iconSize = highlight.labelStyle?.iconSize;
+              const size = normalizeSize(iconSize);
+              iconWrap.style.width = size;
+              iconWrap.style.height = size;
+              applyIconStyle(iconWrap, highlight.labelStyle);
+              labelEl.appendChild(iconWrap);
+            }
+            if (highlight.label) {
+              labelEl.appendChild(document.createTextNode(highlight.label));
+            }
+
+            highlightDiv.appendChild(labelEl);
+          }
         }
       }
 

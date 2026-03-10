@@ -1,6 +1,7 @@
 import { PDFHighlightViewer } from './PDFHighlightViewer';
 
 export { PDFHighlightViewer } from './PDFHighlightViewer';
+export { ZoomMode } from './types';
 
 export type { PDFHighlightViewer as IPDFHighlightViewer } from './api';
 
@@ -9,6 +10,7 @@ export type {
   InputHighlightData,
   BBox,
   HighlightStyle,
+  HighlightLabelStyle,
   TextRange,
   SelectionWithMetadata,
   PerformanceMetrics,
@@ -41,7 +43,6 @@ export type {
   AnalysisResult,
   HeavyTask,
   EventSystem,
-  ZoomMode,
   ZoomValue,
 } from './types';
 
