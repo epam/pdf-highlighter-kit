@@ -383,7 +383,6 @@ export function PDFViewer({
         enableTextSelection: true,
         enableVirtualScrolling: true,
       });
-
       await viewer.loadPDF(pdfUrl);
       viewer.loadHighlights(highlights);
     })();
