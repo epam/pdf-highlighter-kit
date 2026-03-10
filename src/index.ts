@@ -24,6 +24,7 @@ export type {
   TextContent,
   TextItem,
   Page,
+  ThumbnailOptions,
   RenderingQueue,
   InteractionIntent,
   SelectionState,

@@ -82,6 +82,10 @@ export const SimpleExample: React.FC = () => {
   const [currentZoom, setCurrentZoom] = useState<number | null>(null);
   const [renderedPages, setRenderedPages] = useState<Set<number>>(new Set());
 
+  // Page thumbnails panel
+  const [showThumbnailsPanel, setShowThumbnailsPanel] = useState(false);
+  const [thumbnailDataUrls, setThumbnailDataUrls] = useState<Record<number, string>>({});
+
   const pushEvent = useCallback(
     (event: string, data: any) => {
       setEvents((prev) => {
@@ -108,6 +112,8 @@ export const SimpleExample: React.FC = () => {
     setTotalPages(null);
     setCurrentPage(1);
     setCurrentZoom(null);
+    setThumbnailDataUrls({});
+    setShowThumbnailsPanel(false);
     setInitKey((k) => k + 1);
     pushEvent('ui.reinit', {
       enableVirtualScrolling,
@@ -285,7 +291,7 @@ export const SimpleExample: React.FC = () => {
           }
 
           if (event === 'pageChanged') {
-            const p = data?.pageNumber ?? data?.page ?? null;
+            const p = data?.currentPage ?? data?.pageNumber ?? data?.page ?? null;
             if (typeof p === 'number') setCurrentPage(p);
           }
 
@@ -371,6 +377,32 @@ export const SimpleExample: React.FC = () => {
     // Don’t auto-reload on every change; leave manual control for testing.
   }, [highlights]);
 
+  // Load thumbnails when panel is opened
+  useEffect(() => {
+    if (!showThumbnailsPanel || !viewerRef.current || totalPages == null || totalPages < 1) {
+      return;
+    }
+
+    const pageNumbers = Array.from({ length: totalPages }, (_, i) => i + 1);
+
+    viewerRef.current
+      .getThumbnailsDataUrl(pageNumbers, {
+        maxWidth: 120,
+        format: 'image/webp',
+        quality: 0.85,
+      })
+      .then((map) => {
+        setThumbnailDataUrls((prev) => ({ ...prev, ...Object.fromEntries(map) }));
+      })
+      .catch((err) => {
+        console.warn('Failed to load thumbnails:', err);
+      });
+  }, [showThumbnailsPanel, totalPages]);
+
+  const goToPage = useCallback((pageNumber: number) => {
+    viewerRef.current?.setPage(pageNumber);
+  }, []);
+
   return (
     <div style={{ width: '100vw', height: '100vh', position: 'relative' }}>
       <div
@@ -399,6 +431,73 @@ export const SimpleExample: React.FC = () => {
           <DialDropdown menu={{ items: dropdownPageItems }} matchReferenceWidth={false}>
             <DialButton label="Go to page" variant={ButtonVariant.Secondary} />
           </DialDropdown>
+
+          <div style={{ position: 'relative' }}>
+            <DialButton
+              label="Thumbnails"
+              variant={ButtonVariant.Secondary}
+              onClick={() => setShowThumbnailsPanel((v) => !v)}
+            />
+            {showThumbnailsPanel && (
+              <div
+                style={{
+                  position: 'absolute',
+                  top: '100%',
+                  left: 0,
+                  marginTop: 6,
+                  width: 160,
+                  maxHeight: '70vh',
+                  overflow: 'auto',
+                  background: 'rgba(0,0,0,0.92)',
+                  color: 'white',
+                  padding: 10,
+                  borderRadius: 8,
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: 6,
+                  zIndex: 10,
+                  boxShadow: '0 4px 20px rgba(0,0,0,0.3)',
+                }}
+              >
+                {totalPages != null &&
+                  Array.from({ length: totalPages }, (_, i) => i + 1).map((pageNum) => (
+                    <div
+                      key={pageNum}
+                      style={{
+                        position: 'relative',
+                        borderRadius: 4,
+                        border: '1px solid rgba(255,255,255,0.2)',
+                        overflow: 'hidden',
+                      }}
+                      onClick={() => goToPage(pageNum)}
+                    >
+                      {thumbnailDataUrls[pageNum] ? (
+                        <img
+                          src={thumbnailDataUrls[pageNum]}
+                          alt={`Page ${pageNum}`}
+                          style={{ width: '100%', height: 'auto', display: 'block' }}
+                        />
+                      ) : (
+                        <span style={{ fontSize: 12, opacity: 0.8 }}>Page {pageNum}</span>
+                      )}
+                      <input
+                        type="radio"
+                        value={pageNum}
+                        checked={currentPage === pageNum}
+                        readOnly
+                        style={{
+                          position: 'absolute',
+                          top: 0,
+                          left: 0,
+                          zIndex: 2,
+                          margin: 4,
+                        }}
+                      />
+                    </div>
+                  ))}
+              </div>
+            )}
+          </div>
 
           <DialButton
             label="Page 3 top"

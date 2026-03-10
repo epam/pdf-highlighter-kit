@@ -210,6 +210,14 @@ Zoom in or out of the PDF.
 
 Set a specific zoom level (e.g., 1.0 for 100%, 1.5 for 150%).
 
+#### `getThumbnails(pageNumbers: number[], options?: ThumbnailOptions): Promise<Map<number, HTMLCanvasElement>>`
+
+Render page thumbnails (miniatures) for the given page numbers. Returns a `Map` of page number → canvas. Use this when you need canvas elements (e.g. for drawing or custom display). Options: `maxWidth` (target width in px), `scale` (viewport scale).
+
+#### `getThumbnailsDataUrl(pageNumbers: number[], options?: ThumbnailOptions): Promise<Map<number, string>>`
+
+Same as `getThumbnails` but returns data URLs (e.g. for `<img src="...">`). Options include `maxWidth`, `scale`, `format` (`'image/jpeg' | 'image/webp' | 'image/png'`), and `quality` (0–1 for jpeg/webp). Thumbnails are cached; repeated calls for the same page return cached results.
+
 #### `destroy(): void`
 
 Clean up and destroy the viewer instance.
@@ -281,6 +289,27 @@ viewer.addEventListener('error', (e) => {
 > Event payload fields may include `termId`, `pageNumber`, `bboxIndex`, and `bbox` depending on event type.
 
 ## Advanced Usage
+
+### Page thumbnails
+
+```ts
+// ThumbnailOptions: maxWidth?, scale?, format?, quality?
+const pageNumbers = Array.from({ length: viewer.getTotalPages() }, (_, i) => i + 1);
+
+// Option 1: get data URLs for <img src="...">
+const dataUrls = await viewer.getThumbnailsDataUrl(pageNumbers, {
+  maxWidth: 120,
+  format: 'image/webp',
+  quality: 0.85,
+});
+// dataUrls is Map<number, string> — use dataUrls.get(pageNum) in img src
+
+// Option 2: get canvases for custom rendering
+const canvases = await viewer.getThumbnails(pageNumbers, { maxWidth: 120 });
+// canvases is Map<number, HTMLCanvasElement>
+```
+
+For a single page, pass an array with one number: `getThumbnailsDataUrl([5], options)`. Thumbnails are cached inside the viewer; reopening the panel does not re-render unless the cache was cleared (e.g. after loading a new PDF).
 
 ### Custom Styling (per highlight)
 
