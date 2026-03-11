@@ -1,10 +1,9 @@
 import type { HighlightStyle } from '../types';
 
-export interface ResolvedHighlightStyle {
-  backgroundColor: string;
-  borderColor: string;
-  borderWidth: string;
-}
+export type ResolvedHighlightStyle = Pick<
+  HighlightStyle,
+  'backgroundColor' | 'borderColor' | 'borderWidth'
+>;
 
 export function applyHighlightVisualStyle(
   element: HTMLElement,

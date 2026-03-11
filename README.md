@@ -96,6 +96,10 @@ export interface BBoxDimensions {
   height: number;
 }
 
+export type BBoxOrigin = 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right';
+
+export type InteractionMode = 'select' | 'highlight' | 'hybrid';
+
 export interface HighlightStyle {
   backgroundColor: string;
   borderColor?: string;
@@ -126,10 +130,11 @@ export interface HighlightLabelStyle {
   offsetTop?: number;
   outlineRight?: string;
 }
+
 export interface InputHighlightData {
   id: string;
   bboxes: BBox[];
-  bboxOrigin?: 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right';
+  bboxOrigin?: BBoxOrigin;
   bboxSourceDimensions?: BBoxDimensions;
   style?: HighlightStyle;
   label?: string;
@@ -157,7 +162,12 @@ Priority (highest to lowest):
 ### ViewerOptions
 
 ```ts
-interface ViewerOptions {
+export interface HighlightsConfig {
+  enableMultilineHover?: boolean;
+  defaultStyle?: HighlightStyle;
+}
+
+export interface ViewerOptions {
   // Enable text selection functionality
   enableTextSelection?: boolean;
 
@@ -171,7 +181,7 @@ interface ViewerOptions {
   maxCachedPages?: number;
 
   // Interaction mode: 'select' | 'highlight' | 'hybrid'
-  interactionMode?: 'select' | 'highlight' | 'hybrid';
+  interactionMode?: InteractionMode;
 
   // Performance mode (smaller frame budget)
   performanceMode?: boolean;
@@ -180,17 +190,14 @@ interface ViewerOptions {
   accessibility?: boolean;
 
   // Highlight UI config (style is per highlight)
-  highlightsConfig?: {
-    enableMultilineHover?: boolean;
-    defaultStyle?: HighlightStyle;
-  };
+  highlightsConfig?: HighlightsConfig;
 
   // Coordinate origin for incoming bbox values
   // Default: 'bottom-right'
-  bboxOrigin?: 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right';
+  bboxOrigin?: BBoxOrigin;
 
   // Page dimensions for which bbox coordinates were calculated
-  bboxSourceDimensions?: { width: number; height: number };
+  bboxSourceDimensions?: BBoxDimensions;
 }
 ```
 
@@ -224,7 +231,7 @@ Update highlight style by id (patch merge).
 
 #### `goToHighlight(termId: string, occurrenceIndex?: number): void`
 
-Navigate to a specific highlight occurrence. `bboxIndex` defaults to `0`.
+Navigate to a specific highlight occurrence. `occurrenceIndex` defaults to `0`.
 
 #### `nextHighlight(): void` / `previousHighlight(): void`
 
