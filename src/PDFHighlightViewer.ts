@@ -1,6 +1,9 @@
 import { PDFHighlightViewer as IPDFHighlightViewer } from './api';
 import {
   ViewerOptions,
+  BBoxOrigin,
+  BBox,
+  BoundingBox,
   TextRange,
   SelectionWithMetadata,
   PerformanceMetrics,
@@ -73,6 +76,7 @@ export class PDFHighlightViewer implements IPDFHighlightViewer {
       interactionMode: 'hybrid',
       performanceMode: false,
       accessibility: true,
+      bboxOrigin: 'bottom-right',
     };
     this.pdfEngine = new PDFEngine(this.options);
     this.viewportManager = new ViewportManager(
@@ -388,23 +392,18 @@ export class PDFHighlightViewer implements IPDFHighlightViewer {
     const cached = this.pageDimensions.get(pageNumber);
     if (cached) return cached;
 
-    try {
-      // Get PDF page and its viewport at current scale
-      const page = await this.pdfEngine.getPage(pageNumber);
-      const viewport = page.getViewport({ scale: this.currentScale });
+    // Get PDF page and its viewport at current scale
+    const page = await this.pdfEngine.getPage(pageNumber);
+    const viewport = page.getViewport({ scale: this.currentScale });
 
-      const dimensions = {
-        width: viewport.width,
-        height: viewport.height,
-      };
+    const dimensions = {
+      width: viewport.width,
+      height: viewport.height,
+    };
 
-      // Cache the dimensions
-      this.pageDimensions.set(pageNumber, dimensions);
-      return dimensions;
-    } catch (error) {
-      console.error(`Failed to get dimensions for page ${pageNumber}:`, error);
-      return { width: 600, height: this.defaultPageHeight };
-    }
+    // Cache the dimensions
+    this.pageDimensions.set(pageNumber, dimensions);
+    return dimensions;
   }
 
   /**
@@ -503,14 +502,8 @@ export class PDFHighlightViewer implements IPDFHighlightViewer {
     this.pdfContainer.innerHTML = '';
     this.pageContainers.clear();
 
-    // Get dimensions for the first page to estimate all others
-    let avgPageHeight = this.defaultPageHeight;
-    try {
-      const firstPageDimensions = await this.getPageDimensions(1);
-      avgPageHeight = firstPageDimensions.height;
-    } catch (_error) {
-      console.warn('Could not get first page dimensions, using default');
-    }
+    const firstPageDimensions = await this.getPageDimensions(1);
+    const avgPageHeight = firstPageDimensions.height;
 
     for (let pageNumber = 1; pageNumber <= this.totalPages; pageNumber++) {
       const pageContainer = document.createElement('div');
@@ -519,15 +512,9 @@ export class PDFHighlightViewer implements IPDFHighlightViewer {
       pageContainer.style.marginBottom = '20px';
       pageContainer.style.position = 'relative';
 
-      // Try to set real dimensions, or use estimated height
-      try {
-        const dimensions = await this.getPageDimensions(pageNumber);
-        pageContainer.style.height = `${dimensions.height}px`;
-        pageContainer.style.width = `${dimensions.width}px`;
-      } catch (_error) {
-        // Use average height as fallback
-        pageContainer.style.height = `${avgPageHeight}px`;
-      }
+      const dimensions = await this.getPageDimensions(pageNumber);
+      pageContainer.style.height = `${dimensions.height}px`;
+      pageContainer.style.width = `${dimensions.width}px`;
 
       this.pdfContainer.appendChild(pageContainer);
       this.pageContainers.set(pageNumber, pageContainer);
@@ -914,9 +901,23 @@ export class PDFHighlightViewer implements IPDFHighlightViewer {
     const pageData = this.pdfEngine.getPageData(pageNumber);
     if (!pageData?.textContent) return;
 
+    const normalizedHighlights = this.highlightsIndex.highlights.map((highlight) => ({
+      ...highlight,
+      bboxes: highlight.bboxes.map((bbox) => {
+        const normalized = this.normalizeBBoxForPage(bbox, bbox.page);
+        return {
+          ...bbox,
+          x1: normalized.x1,
+          y1: normalized.y1,
+          x2: normalized.x2,
+          y2: normalized.y2,
+        };
+      }),
+    }));
+
     this.layerBuilder.updateHighlights(
       pageContainer,
-      this.highlightsIndex.highlights,
+      normalizedHighlights,
       pageNumber,
       pageData.textContent,
       this.currentScale
@@ -1087,7 +1088,14 @@ export class PDFHighlightViewer implements IPDFHighlightViewer {
     for (const h of this.highlightsIndex.highlights) {
       for (let i = 0; i < h.bboxes.length; i++) {
         const b = h.bboxes[i];
-        list.push({ termId: h.id, pageNumber: b.page, occurrenceIndex: i, x1: b.x1, y1: b.y1 });
+        const normalized = this.normalizeBBoxForPage(b, b.page);
+        list.push({
+          termId: h.id,
+          pageNumber: b.page,
+          occurrenceIndex: i,
+          x1: normalized.x1,
+          y1: normalized.y1,
+        });
       }
     }
 
@@ -1103,6 +1111,7 @@ export class PDFHighlightViewer implements IPDFHighlightViewer {
     if (!bbox) return;
 
     const page = bbox.page;
+    const normalizedBBox = this.normalizeBBoxForPage(bbox, page);
 
     this.highlightSelectedTerm(termId);
 
@@ -1117,7 +1126,7 @@ export class PDFHighlightViewer implements IPDFHighlightViewer {
         }
 
         const pageTop = pageContainer.offsetTop;
-        const y = bbox.y1 * this.currentScale;
+        const y = normalizedBBox.y1 * this.currentScale;
         this.container.scrollTop = Math.max(0, pageTop + y - 60);
 
         this.emit('navigationComplete', { termId, pageNumber: page, occurrenceIndex });
@@ -1152,7 +1161,15 @@ export class PDFHighlightViewer implements IPDFHighlightViewer {
     if (!this.container) return;
 
     const pageTop = this.getPageScrollTop(pageNumber);
-    const targetY = pageTop + y * this.currentScale - this.container.clientHeight * 0.3;
+    const origin = this.options.bboxOrigin ?? 'bottom-right';
+    const pixelDimensions = this.pageDimensions.get(pageNumber);
+    if (!pixelDimensions) {
+      throw new Error(`Page dimensions for page ${pageNumber} are not available`);
+    }
+
+    const dimensions = this.toPageCoordinateDimensions(pixelDimensions);
+    const normalizedY = origin.startsWith('bottom') ? dimensions.height - y : y;
+    const targetY = pageTop + normalizedY * this.currentScale - this.container.clientHeight * 0.3;
 
     this.container.scrollTop = Math.max(0, targetY);
 
@@ -1426,16 +1443,18 @@ export class PDFHighlightViewer implements IPDFHighlightViewer {
           const bbox = highlight.bboxes[bboxIndex];
           if (bbox.page !== pageNumber) continue;
 
+          const normalizedBBox = this.normalizeBBoxForPage(bbox, pageNumber);
+
           const highlightDiv = document.createElement('div');
           highlightDiv.className = 'highlight';
           highlightDiv.setAttribute('data-term-id', highlight.id);
           highlightDiv.setAttribute('data-page', String(pageNumber));
           highlightDiv.setAttribute('data-bbox-index', String(bboxIndex));
 
-          const left = bbox.x1 * scale;
-          const top = bbox.y1 * scale;
-          const width = (bbox.x2 - bbox.x1) * scale;
-          const height = (bbox.y2 - bbox.y1) * scale;
+          const left = normalizedBBox.x1 * scale;
+          const top = normalizedBBox.y1 * scale;
+          const width = (normalizedBBox.x2 - normalizedBBox.x1) * scale;
+          const height = (normalizedBBox.y2 - normalizedBBox.y1) * scale;
 
           highlightDiv.style.position = 'absolute';
           highlightDiv.style.left = `${left}px`;
@@ -1454,7 +1473,11 @@ export class PDFHighlightViewer implements IPDFHighlightViewer {
 
           const baseOpacity = typeof style?.opacity === 'number' ? style.opacity : 0.3;
 
-          const overlappingCount = this.countOverlappingHighlights(highlightLayer, bbox, scale);
+          const overlappingCount = this.countOverlappingHighlights(
+            highlightLayer,
+            normalizedBBox,
+            scale
+          );
           const effectiveOpacity = Math.max(
             0.05,
             baseOpacity / Math.max(1, overlappingCount * 0.7)
@@ -1641,7 +1664,58 @@ export class PDFHighlightViewer implements IPDFHighlightViewer {
    */
   private buildSpatialIndexForPage(pageNumber: number): void {
     const refs = this.highlightsIndex.pages[String(pageNumber)] ?? [];
-    this.performanceOptimizer.buildSpatialIndex(refs, pageNumber);
+    const normalizedRefs = refs.map((ref) => ({
+      ...ref,
+      bbox: this.normalizeBBoxForPage({ ...ref.bbox, page: ref.page }, ref.page),
+    }));
+    this.performanceOptimizer.buildSpatialIndex(normalizedRefs, pageNumber);
+  }
+
+  private toPageCoordinateDimensions(pixelDimensions: { width: number; height: number }): {
+    width: number;
+    height: number;
+  } {
+    const scale = this.currentScale > 0 ? this.currentScale : 1;
+    return {
+      width: pixelDimensions.width / scale,
+      height: pixelDimensions.height / scale,
+    };
+  }
+
+  private normalizeBBoxForPage(
+    bbox: BBox | (BoundingBox & { page?: number }),
+    pageNumber: number
+  ): BoundingBox {
+    const origin: BBoxOrigin = this.options.bboxOrigin ?? 'bottom-right';
+    const pixelDimensions = this.pageDimensions.get(pageNumber);
+    if (!pixelDimensions) {
+      throw new Error(`Page dimensions for page ${pageNumber} are not available`);
+    }
+
+    const { width: pageWidth, height: pageHeight } =
+      this.toPageCoordinateDimensions(pixelDimensions);
+
+    let x1 = bbox.x1;
+    let x2 = bbox.x2;
+    let y1 = bbox.y1;
+    let y2 = bbox.y2;
+
+    if (origin.endsWith('right')) {
+      x1 = pageWidth - bbox.x1;
+      x2 = pageWidth - bbox.x2;
+    }
+
+    if (origin.startsWith('bottom')) {
+      y1 = pageHeight - bbox.y1;
+      y2 = pageHeight - bbox.y2;
+    }
+
+    return {
+      x1: Math.min(x1, x2),
+      y1: Math.min(y1, y2),
+      x2: Math.max(x1, x2),
+      y2: Math.max(y1, y2),
+    };
   }
   /**
    * Build spatial indices for all pages

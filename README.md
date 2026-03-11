@@ -156,6 +156,10 @@ interface ViewerConfig {
   highlightsConfig?: {
     enableMultilineHover?: boolean;
   };
+
+  // Coordinate origin for incoming bbox values
+  // Default: 'bottom-right'
+  bboxOrigin?: 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right';
 }
 ```
 

@@ -270,6 +270,8 @@ export interface HighlightsConfig {
   defaultStyle?: HighlightStyle; // optional fallback if highlight.style is missing
 }
 
+export type BBoxOrigin = 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right';
+
 export interface ViewerOptions {
   enableTextSelection?: boolean;
   enableVirtualScrolling?: boolean;
@@ -279,6 +281,7 @@ export interface ViewerOptions {
   performanceMode?: boolean;
   accessibility?: boolean;
   highlightsConfig?: HighlightsConfig;
+  bboxOrigin?: BBoxOrigin;
 }
 
 export interface ThumbnailOptions {
