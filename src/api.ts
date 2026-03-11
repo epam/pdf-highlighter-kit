@@ -8,6 +8,7 @@ import {
   InteractionMode,
   InputHighlightData,
   HighlightStyle,
+  HighlightLabelStyle,
   ZoomValue,
   ThumbnailOptions,
 } from './types';
@@ -45,7 +46,11 @@ export interface PDFHighlightViewer {
 
   removeHighlight(termId: string): void;
 
-  updateHighlightStyle(termId: string, style: Partial<HighlightStyle>): void;
+  updateHighlightStyle(
+    termId: string,
+    style: Partial<HighlightStyle>,
+    labelStyle?: Partial<HighlightLabelStyle>
+  ): void;
 
   textSelection: {
     enable(): void;

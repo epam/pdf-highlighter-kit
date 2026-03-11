@@ -225,9 +225,9 @@ Add a single highlight (incremental update).
 
 Remove highlight by its `id`.
 
-#### `updateHighlightStyle(termId: string, stylePatch: Partial<HighlightStyle>): void`
+#### `updateHighlightStyle(termId: string, stylePatch: Partial<HighlightStyle>, labelStylePatch?: Partial<HighlightLabelStyle>): void`
 
-Update highlight style by id (patch merge).
+Update highlight style by id (patch merge). Optionally pass `labelStylePatch` to update label styles as well.
 
 #### `goToHighlight(termId: string, occurrenceIndex?: number): void`
 

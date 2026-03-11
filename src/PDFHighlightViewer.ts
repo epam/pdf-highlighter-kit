@@ -870,7 +870,11 @@ export class PDFHighlightViewer implements IPDFHighlightViewer {
     this.emit('highlightRemoved', { termId, pages: Array.from(affectedPages) });
   }
 
-  updateHighlightStyle(termId: string, stylePatch: Partial<HighlightStyle>): void {
+  updateHighlightStyle(
+    termId: string,
+    stylePatch: Partial<HighlightStyle>,
+    labelStylePatch?: Partial<HighlightLabelStyle>
+  ): void {
     const prev = this.highlightsIndex.byId.get(termId);
     if (!prev) return;
 
@@ -880,6 +884,12 @@ export class PDFHighlightViewer implements IPDFHighlightViewer {
         ...(prev.style ?? {}),
         ...stylePatch,
       } as HighlightStyle,
+      labelStyle: labelStylePatch
+        ? {
+            ...(prev.labelStyle ?? {}),
+            ...labelStylePatch,
+          }
+        : prev.labelStyle,
     };
 
     const affectedPages = new Set<number>();
