@@ -47,9 +47,16 @@ export interface HighlightLabelStyle {
   iconColor?: string;
 }
 
+export interface BBoxDimensions {
+  width: number;
+  height: number;
+}
+
 export interface InputHighlightData {
   id: string;
   bboxes: BBox[];
+  bboxOrigin?: BBoxOrigin;
+  bboxSourceDimensions?: BBoxDimensions;
   style?: HighlightStyle;
   label?: string;
   /** Inline SVG string (e.g. from Tabler) to render before the label inside the label frame. Use trusted content only. */
@@ -282,6 +289,7 @@ export interface ViewerOptions {
   accessibility?: boolean;
   highlightsConfig?: HighlightsConfig;
   bboxOrigin?: BBoxOrigin;
+  bboxSourceDimensions?: BBoxDimensions;
 }
 
 export interface ThumbnailOptions {

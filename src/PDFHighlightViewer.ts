@@ -3,6 +3,7 @@ import {
   ViewerOptions,
   BBoxOrigin,
   BBox,
+  BBoxDimensions,
   BoundingBox,
   TextRange,
   SelectionWithMetadata,
@@ -904,7 +905,12 @@ export class PDFHighlightViewer implements IPDFHighlightViewer {
     const normalizedHighlights = this.highlightsIndex.highlights.map((highlight) => ({
       ...highlight,
       bboxes: highlight.bboxes.map((bbox) => {
-        const normalized = this.normalizeBBoxForPage(bbox, bbox.page);
+        const normalized = this.normalizeBBoxForPage(
+          bbox,
+          bbox.page,
+          highlight.bboxSourceDimensions,
+          highlight.bboxOrigin
+        );
         return {
           ...bbox,
           x1: normalized.x1,
@@ -1088,7 +1094,12 @@ export class PDFHighlightViewer implements IPDFHighlightViewer {
     for (const h of this.highlightsIndex.highlights) {
       for (let i = 0; i < h.bboxes.length; i++) {
         const b = h.bboxes[i];
-        const normalized = this.normalizeBBoxForPage(b, b.page);
+        const normalized = this.normalizeBBoxForPage(
+          b,
+          b.page,
+          h.bboxSourceDimensions,
+          h.bboxOrigin
+        );
         list.push({
           termId: h.id,
           pageNumber: b.page,
@@ -1111,7 +1122,12 @@ export class PDFHighlightViewer implements IPDFHighlightViewer {
     if (!bbox) return;
 
     const page = bbox.page;
-    const normalizedBBox = this.normalizeBBoxForPage(bbox, page);
+    const normalizedBBox = this.normalizeBBoxForPage(
+      bbox,
+      page,
+      highlight.bboxSourceDimensions,
+      highlight.bboxOrigin
+    );
 
     this.highlightSelectedTerm(termId);
 
@@ -1443,7 +1459,12 @@ export class PDFHighlightViewer implements IPDFHighlightViewer {
           const bbox = highlight.bboxes[bboxIndex];
           if (bbox.page !== pageNumber) continue;
 
-          const normalizedBBox = this.normalizeBBoxForPage(bbox, pageNumber);
+          const normalizedBBox = this.normalizeBBoxForPage(
+            bbox,
+            pageNumber,
+            highlight.bboxSourceDimensions,
+            highlight.bboxOrigin
+          );
 
           const highlightDiv = document.createElement('div');
           highlightDiv.className = 'highlight';
@@ -1664,10 +1685,21 @@ export class PDFHighlightViewer implements IPDFHighlightViewer {
    */
   private buildSpatialIndexForPage(pageNumber: number): void {
     const refs = this.highlightsIndex.pages[String(pageNumber)] ?? [];
-    const normalizedRefs = refs.map((ref) => ({
-      ...ref,
-      bbox: this.normalizeBBoxForPage({ ...ref.bbox, page: ref.page }, ref.page),
-    }));
+    const normalizedRefs = refs.map((ref) => {
+      const highlight = this.highlightsIndex.byId.get(ref.id);
+      return {
+        ...ref,
+        bbox: this.normalizeBBoxForPage(
+          highlight?.bboxes[ref.bboxIndex] ?? {
+            ...ref.bbox,
+            page: ref.page,
+          },
+          ref.page,
+          highlight?.bboxSourceDimensions,
+          highlight?.bboxOrigin
+        ),
+      };
+    });
     this.performanceOptimizer.buildSpatialIndex(normalizedRefs, pageNumber);
   }
 
@@ -1684,9 +1716,12 @@ export class PDFHighlightViewer implements IPDFHighlightViewer {
 
   private normalizeBBoxForPage(
     bbox: BBox | (BoundingBox & { page?: number }),
-    pageNumber: number
+    pageNumber: number,
+    bboxSourceDimensions?: BBoxDimensions,
+    bboxOrigin?: BBoxOrigin
   ): BoundingBox {
-    const origin: BBoxOrigin = this.options.bboxOrigin ?? 'bottom-right';
+    const origin: BBoxOrigin = bboxOrigin ?? this.options.bboxOrigin ?? 'bottom-right';
+    const computedSourceDimensions = bboxSourceDimensions ?? this.options.bboxSourceDimensions;
     const pixelDimensions = this.pageDimensions.get(pageNumber);
     if (!pixelDimensions) {
       throw new Error(`Page dimensions for page ${pageNumber} are not available`);
@@ -1700,14 +1735,27 @@ export class PDFHighlightViewer implements IPDFHighlightViewer {
     let y1 = bbox.y1;
     let y2 = bbox.y2;
 
+    if (
+      computedSourceDimensions &&
+      computedSourceDimensions.width &&
+      computedSourceDimensions.height
+    ) {
+      const xScale = pageWidth / computedSourceDimensions.width;
+      const yScale = pageHeight / computedSourceDimensions.height;
+      x1 *= xScale;
+      x2 *= xScale;
+      y1 *= yScale;
+      y2 *= yScale;
+    }
+
     if (origin.endsWith('right')) {
-      x1 = pageWidth - bbox.x1;
-      x2 = pageWidth - bbox.x2;
+      x1 = pageWidth - x1;
+      x2 = pageWidth - x2;
     }
 
     if (origin.startsWith('bottom')) {
-      y1 = pageHeight - bbox.y1;
-      y2 = pageHeight - bbox.y2;
+      y1 = pageHeight - y1;
+      y2 = pageHeight - y2;
     }
 
     return {
