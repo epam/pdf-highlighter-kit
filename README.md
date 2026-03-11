@@ -100,6 +100,7 @@ export interface HighlightStyle {
   backgroundColor: string;
   borderColor?: string;
   borderWidth?: string;
+  outline?: string;
   opacity?: number;
   hoverOpacity?: number;
   pulseAnimation?: boolean;
@@ -107,17 +108,24 @@ export interface HighlightStyle {
 
 export interface HighlightLabelStyle {
   fontSize?: string | number;
+  opacity?: number;
   color?: string;
   backgroundColor?: string;
   padding?: string;
-  borderRadius?: string;
+  borderRadius?: string; // e.g. '2px' or shorthand '2px 2px 0 0'
   fontFamily?: string;
   fontWeight?: string | number;
   border?: string;
+  borderColor?: string;
+  borderWidth?: string;
+  outline?: string;
   whiteSpace?: string;
   iconSize?: string | number; // size for beforeIcon (e.g. 14 or '14px')
+  iconColor?: string;
+  offsetLeft?: number;
+  offsetTop?: number;
+  outlineRight?: string;
 }
-
 export interface InputHighlightData {
   id: string;
   bboxes: BBox[];
@@ -146,10 +154,10 @@ Priority (highest to lowest):
 
 ## Configuration Options
 
-### ViewerConfig
+### ViewerOptions
 
 ```ts
-interface ViewerConfig {
+interface ViewerOptions {
   // Enable text selection functionality
   enableTextSelection?: boolean;
 
@@ -165,15 +173,16 @@ interface ViewerConfig {
   // Interaction mode: 'select' | 'highlight' | 'hybrid'
   interactionMode?: 'select' | 'highlight' | 'hybrid';
 
-  // Custom styles configuration (viewer/selection CSS). Highlight styles are per-highlight.
-  customStyles?: StyleConfig;
+  // Performance mode (smaller frame budget)
+  performanceMode?: boolean;
 
-  // PDF.js worker source URL
-  workerSrc?: string;
+  // Enable accessibility helpers
+  accessibility?: boolean;
 
   // Highlight UI config (style is per highlight)
   highlightsConfig?: {
     enableMultilineHover?: boolean;
+    defaultStyle?: HighlightStyle;
   };
 
   // Coordinate origin for incoming bbox values
@@ -189,11 +198,11 @@ interface ViewerConfig {
 
 ### Main Methods
 
-#### `init(container: HTMLElement, config?: ViewerConfig): Promise<void>`
+#### `init(container: HTMLElement, config?: ViewerOptions): Promise<void>`
 
 Initialize the viewer with a container element and optional configuration.
 
-#### `loadPDF(source: string | ArrayBuffer): Promise<void>`
+#### `loadPDF(source: string | ArrayBuffer | Blob): Promise<void>`
 
 Load a PDF document from URL or ArrayBuffer.
 
@@ -213,18 +222,15 @@ Remove highlight by its `id`.
 
 Update highlight style by id (patch merge).
 
-#### `goToHighlight(termId: string, bboxIndex?: number): void`
+#### `goToHighlight(termId: string, occurrenceIndex?: number): void`
 
 Navigate to a specific highlight occurrence. `bboxIndex` defaults to `0`.
 
-#### `nextHighlight(termId?: string): void` / `previousHighlight(termId?: string): void`
+#### `nextHighlight(): void` / `previousHighlight(): void`
 
-Navigate across highlight occurrences:
+Navigate across all highlight occurrences in document order.
 
-- without `termId` → across all highlights in document order
-- with `termId` → only within that highlight’s occurrences
-
-#### `goToPage(pageNumber: number): void`
+#### `setPage(pageNumber: number): void`
 
 Navigate to a specific page (1-based).
 
@@ -232,7 +238,7 @@ Navigate to a specific page (1-based).
 
 Zoom in or out of the PDF.
 
-#### `setZoom(scale: number): void`
+#### `setZoom(value: ZoomMode | number): void`
 
 Set a specific zoom level (e.g., 1.0 for 100%, 1.5 for 150%).
 
@@ -262,7 +268,7 @@ viewer.addEventListener('pdfLoaded', (e) => {
 });
 
 viewer.addEventListener('pageChanged', (e) => {
-  console.log('Current page:', e.pageNumber);
+  console.log('Current page:', e.currentPage);
 });
 
 viewer.addEventListener('zoomChanged', (e) => {
@@ -278,7 +284,7 @@ viewer.addEventListener('renderError', (e) => {
 });
 
 viewer.addEventListener('highlightsLoaded', (e) => {
-  console.log('Highlights loaded:', e.data?.length ?? 0);
+  console.log('Highlights loaded:', e.count);
 });
 
 viewer.addEventListener('highlightHover', (e) => {
