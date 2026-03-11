@@ -13,6 +13,11 @@ import {
   applyLabelOutlineStyle,
   applyLabelStyle,
 } from '../utils/label-style';
+import {
+  getHighlightBaseOpacity,
+  getHighlightHoverOpacity,
+  resolveHighlightStyle,
+} from '../utils/highlight-style';
 
 interface ItemHighlight {
   termId: string;
@@ -281,22 +286,16 @@ export class UnifiedLayerBuilder {
   private applyInlineHighlightStyle(el: HTMLElement, style?: HighlightStyle): void {
     if (!style?.backgroundColor) return;
 
-    const bg = style.backgroundColor;
-    el.style.backgroundColor = bg;
-
-    const borderColor = style.borderColor || bg;
-    const borderWidth = style.borderWidth || '1px';
+    const { backgroundColor, borderColor, borderWidth } = resolveHighlightStyle(style);
+    el.style.backgroundColor = backgroundColor;
     el.style.border = `${borderWidth} solid ${borderColor}`;
     applyBaseOutlineStyle(el, style);
 
-    const baseOpacity = typeof style.opacity === 'number' ? style.opacity : 0.3;
+    const baseOpacity = getHighlightBaseOpacity(style);
     el.style.opacity = String(baseOpacity);
     el.dataset.baseOpacity = String(baseOpacity);
 
-    const hoverOpacity =
-      typeof style.hoverOpacity === 'number'
-        ? style.hoverOpacity
-        : Math.min(0.6, baseOpacity + 0.2);
+    const hoverOpacity = getHighlightHoverOpacity(style, baseOpacity);
     el.dataset.hoverOpacity = String(hoverOpacity);
   }
 

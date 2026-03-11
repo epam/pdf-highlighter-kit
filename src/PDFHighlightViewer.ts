@@ -26,6 +26,12 @@ import { UnifiedInteractionHandler, InteractionCallbacks } from './core/interact
 import { PerformanceOptimizer } from './core/performance-optimizer';
 import { buildHighlightsIndex } from './utils/highlight-adapter';
 import {
+  applyHighlightVisualStyle,
+  getHighlightBaseOpacity,
+  getHighlightHoverOpacity,
+  resolveHighlightStyle,
+} from './utils/highlight-style';
+import {
   appendLabelIcon,
   applyBaseOutlineStyle,
   applyLabelOutlineStyle,
@@ -1457,9 +1463,7 @@ export class PDFHighlightViewer implements IPDFHighlightViewer {
 
       for (const highlight of this.highlightsIndex.highlights) {
         const style = highlight.style;
-        const backgroundColor = style?.backgroundColor ?? '#666666';
-        const borderColor = style?.borderColor ?? backgroundColor;
-        const borderWidth = style?.borderWidth ?? '1px';
+        const resolvedStyle = resolveHighlightStyle(style);
 
         for (let bboxIndex = 0; bboxIndex < highlight.bboxes.length; bboxIndex++) {
           const bbox = highlight.bboxes[bboxIndex];
@@ -1496,20 +1500,11 @@ export class PDFHighlightViewer implements IPDFHighlightViewer {
 
           const highlightVisual = document.createElement('span');
           highlightVisual.className = 'highlight-visual';
-          highlightVisual.style.position = 'absolute';
-          highlightVisual.style.left = '0';
-          highlightVisual.style.top = '0';
-          highlightVisual.style.right = '0';
-          highlightVisual.style.bottom = '0';
-          highlightVisual.style.pointerEvents = 'none';
-          highlightVisual.style.boxSizing = 'border-box';
-          highlightVisual.style.mixBlendMode = 'multiply';
-          highlightVisual.style.backgroundColor = backgroundColor;
-          highlightVisual.style.border = `${borderWidth} solid ${borderColor}`;
+          applyHighlightVisualStyle(highlightVisual, resolvedStyle);
           applyBaseOutlineStyle(highlightVisual, style);
           highlightDiv.appendChild(highlightVisual);
 
-          const baseOpacity = typeof style?.opacity === 'number' ? style.opacity : 0.3;
+          const baseOpacity = getHighlightBaseOpacity(style);
 
           const overlappingCount = this.countOverlappingHighlights(
             highlightLayer,
@@ -1524,10 +1519,7 @@ export class PDFHighlightViewer implements IPDFHighlightViewer {
           highlightVisual.style.opacity = effectiveOpacity.toString();
           highlightDiv.dataset.originalOpacity = effectiveOpacity.toString();
 
-          const hoverOpacity =
-            typeof style?.hoverOpacity === 'number'
-              ? style.hoverOpacity
-              : Math.min(0.6, effectiveOpacity + 0.2);
+          const hoverOpacity = getHighlightHoverOpacity(style, effectiveOpacity);
           const termLabelsSelector = `.highlight-label[data-term-id="${highlight.id}"]`;
 
           highlightDiv.addEventListener('mouseenter', () => {
@@ -1719,9 +1711,11 @@ export class PDFHighlightViewer implements IPDFHighlightViewer {
 
       const highlight = this.getHighlightById(termId);
       const style = this.getHighlightStyle(termId);
-      const bg = style?.backgroundColor ?? el.style.backgroundColor ?? '#666666';
-      const borderColor = style?.borderColor ?? bg;
-      const borderWidth = style?.borderWidth ?? '1px';
+      const {
+        backgroundColor: bg,
+        borderColor,
+        borderWidth,
+      } = resolveHighlightStyle(style, el.style.backgroundColor || '#666666');
 
       const visual = el.querySelector<HTMLElement>('.highlight-visual') ?? el;
       visual.style.backgroundColor = bg;
@@ -1776,15 +1770,11 @@ export class PDFHighlightViewer implements IPDFHighlightViewer {
         hoveredIds &&
         Array.isArray(hoveredIds)
       ) {
-        const baseOpacity =
-          typeof style?.opacity === 'number'
-            ? style.opacity
-            : parseFloat(el.dataset.originalOpacity ?? '0.3');
+        const baseOpacity = style
+          ? getHighlightBaseOpacity(style)
+          : parseFloat(el.dataset.originalOpacity ?? '0.3');
 
-        const hoverOpacity =
-          typeof style?.hoverOpacity === 'number'
-            ? style.hoverOpacity
-            : Math.min(0.6, baseOpacity + 0.2);
+        const hoverOpacity = getHighlightHoverOpacity(style, baseOpacity);
 
         if (hoveredIds.includes(termId)) {
           visual.style.opacity = String(hoverOpacity);
