@@ -1728,6 +1728,7 @@ export class PDFHighlightViewer implements IPDFHighlightViewer {
 
       const bboxIdx = el.getAttribute('data-bbox-index');
       const isWrapper = el.classList.contains('highlight-wrapper');
+      const labelStyle = highlight?.labelStyle;
       const labelEl = isWrapper
         ? el.querySelector<HTMLElement>('.highlight-label')
         : bboxIdx !== null
@@ -1736,32 +1737,15 @@ export class PDFHighlightViewer implements IPDFHighlightViewer {
             )
           : highlightLayer.querySelector<HTMLElement>(`.highlight-label[data-term-id="${termId}"]`);
       if (labelEl) {
-        if (isWrapper) {
-          const { left: wrapperOffsetLeft, top: wrapperOffsetTop } = this.getLabelOffsets(
-            highlight?.labelStyle
-          );
-          labelEl.style.left = `${wrapperOffsetLeft}px`;
-          labelEl.style.top = `${wrapperOffsetTop}px`;
-        } else {
+        if (!isWrapper) {
           const baseLabelLeft = parseFloat(labelEl.dataset.baseLeft ?? '0');
           const baseLabelTop = parseFloat(labelEl.dataset.baseTop ?? '0');
-          const { left: labelOffsetLeft, top: labelOffsetTop } = this.getLabelOffsets(
-            highlight?.labelStyle
-          );
+          const { left: labelOffsetLeft, top: labelOffsetTop } = this.getLabelOffsets(labelStyle);
           labelEl.style.left = `${baseLabelLeft + labelOffsetLeft}px`;
           labelEl.style.top = `${baseLabelTop + labelOffsetTop}px`;
         }
-        if (highlight?.labelStyle?.borderColor !== undefined) {
-          labelEl.style.borderColor = highlight.labelStyle.borderColor;
-        } else {
-          labelEl.style.borderColor = '';
-        }
-        if (highlight?.labelStyle?.borderWidth !== undefined) {
-          labelEl.style.borderWidth = highlight.labelStyle.borderWidth;
-        } else {
-          labelEl.style.borderWidth = '';
-        }
-        applyLabelOutlineStyle(labelEl, highlight?.labelStyle);
+        applyLabelStyle(labelEl, labelStyle);
+        applyLabelOutlineStyle(labelEl, labelStyle);
         labelEl.style.opacity = String(highlightBaseOpacity);
       }
 
