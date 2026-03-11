@@ -17,6 +17,7 @@ const ICON_ALERT_CIRCLE_SVG =
 const initialHighlights: InputHighlightData[] = [
   {
     id: 'red-zone',
+    bboxOrigin: 'top-left',
     bboxes: [{ x1: 180, y1: 110, x2: 340, y2: 130, page: 1 }],
     style: { backgroundColor: '#ff6b6b', opacity: 0.4 },
     label: 'Red zone',
@@ -43,6 +44,8 @@ const initialHighlights: InputHighlightData[] = [
   },
   {
     id: 'green-zone',
+    // Coordinates were generated on a 1200x1000 source canvas and are scaled to real page size.
+    bboxSourceDimensions: { width: 1200, height: 1000 },
     bboxes: [
       { x1: 90, y1: 250, x2: 280, y2: 270, page: 2 },
       { x1: 300, y1: 300, x2: 450, y2: 320, page: 3 },

@@ -91,6 +91,11 @@ export interface BBox {
   page: number;
 }
 
+export interface BBoxDimensions {
+  width: number;
+  height: number;
+}
+
 export interface HighlightStyle {
   backgroundColor: string;
   borderColor?: string;
@@ -116,6 +121,8 @@ export interface HighlightLabelStyle {
 export interface InputHighlightData {
   id: string;
   bboxes: BBox[];
+  bboxOrigin?: 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right';
+  bboxSourceDimensions?: BBoxDimensions;
   style?: HighlightStyle;
   label?: string;
   beforeIcon?: string; // inline SVG string (trusted content only, e.g. Tabler icons)
@@ -124,6 +131,18 @@ export interface InputHighlightData {
   metadata?: Record<string, any>;
 }
 ```
+
+If `bboxSourceDimensions` is provided, each bbox coordinate is recalculated against the actual page size:
+
+```ts
+scaledX = (x / bboxSourceDimensions.width) * actualPageWidth;
+scaledY = (y / bboxSourceDimensions.height) * actualPageHeight;
+```
+
+Priority (highest to lowest):
+
+- `highlight.bboxOrigin` / `highlight.bboxSourceDimensions`
+- global viewer options (`bboxOrigin`, `bboxSourceDimensions`)
 
 ## Configuration Options
 
@@ -160,6 +179,9 @@ interface ViewerConfig {
   // Coordinate origin for incoming bbox values
   // Default: 'bottom-right'
   bboxOrigin?: 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right';
+
+  // Page dimensions for which bbox coordinates were calculated
+  bboxSourceDimensions?: { width: number; height: number };
 }
 ```
 
