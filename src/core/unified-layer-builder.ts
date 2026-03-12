@@ -7,8 +7,17 @@ import {
   HighlightStyle,
   HighlightLabelStyle,
 } from '../types';
-import { applyLabelStyle, applyIconStyle, normalizeSize } from '../utils/label-style';
-import { sanitizeIconHtml } from '../utils/sanitize-icon-html';
+import {
+  appendLabelIcon,
+  applyBaseOutlineStyle,
+  applyLabelOutlineStyle,
+  applyLabelStyle,
+} from '../utils/label-style';
+import {
+  getHighlightBaseOpacity,
+  getHighlightHoverOpacity,
+  resolveHighlightStyle,
+} from '../utils/highlight-style';
 
 interface ItemHighlight {
   termId: string;
@@ -227,25 +236,10 @@ export class UnifiedLayerBuilder {
       labelEl.style.display = 'inline-flex';
       labelEl.style.alignItems = 'center';
       labelEl.style.gap = '4px';
-      this.applyDefaultLabelStyle(labelEl, segment.highlightInfo.style);
       applyLabelStyle(labelEl, segment.highlightInfo.labelStyle);
+      applyLabelOutlineStyle(labelEl, segment.highlightInfo.labelStyle);
 
-      if (segment.highlightInfo.beforeIcon) {
-        const iconWrap = document.createElement('span');
-        iconWrap.className = 'highlight-label-icon';
-        iconWrap.innerHTML = sanitizeIconHtml(segment.highlightInfo.beforeIcon);
-        const svg = iconWrap.querySelector('svg');
-        if (svg) {
-          svg.removeAttribute('width');
-          svg.removeAttribute('height');
-        }
-        const iconSize = segment.highlightInfo.labelStyle?.iconSize;
-        const size = normalizeSize(iconSize);
-        iconWrap.style.width = size;
-        iconWrap.style.height = size;
-        applyIconStyle(iconWrap, segment.highlightInfo.labelStyle);
-        labelEl.appendChild(iconWrap);
-      }
+      appendLabelIcon(labelEl, segment.highlightInfo.beforeIcon, segment.highlightInfo.labelStyle);
       if (segment.highlightInfo.label) {
         const textNode = document.createTextNode(segment.highlightInfo.label);
         labelEl.appendChild(textNode);
@@ -289,30 +283,19 @@ export class UnifiedLayerBuilder {
     return wrapper;
   }
 
-  private applyDefaultLabelStyle(el: HTMLElement, highlightStyle?: HighlightStyle): void {
-    const color = highlightStyle?.borderColor ?? highlightStyle?.backgroundColor ?? '#666666';
-    el.style.color = color;
-    el.style.border = `1px solid ${color}`;
-  }
-
   private applyInlineHighlightStyle(el: HTMLElement, style?: HighlightStyle): void {
     if (!style?.backgroundColor) return;
 
-    const bg = style.backgroundColor;
-    el.style.backgroundColor = bg;
-
-    const borderColor = style.borderColor || bg;
-    const borderWidth = style.borderWidth || '1px';
+    const { backgroundColor, borderColor, borderWidth } = resolveHighlightStyle(style);
+    el.style.backgroundColor = backgroundColor;
     el.style.border = `${borderWidth} solid ${borderColor}`;
+    applyBaseOutlineStyle(el, style);
 
-    const baseOpacity = typeof style.opacity === 'number' ? style.opacity : 0.3;
+    const baseOpacity = getHighlightBaseOpacity(style);
     el.style.opacity = String(baseOpacity);
     el.dataset.baseOpacity = String(baseOpacity);
 
-    const hoverOpacity =
-      typeof style.hoverOpacity === 'number'
-        ? style.hoverOpacity
-        : Math.min(0.6, baseOpacity + 0.2);
+    const hoverOpacity = getHighlightHoverOpacity(style, baseOpacity);
     el.dataset.hoverOpacity = String(hoverOpacity);
   }
 

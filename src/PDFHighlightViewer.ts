@@ -14,6 +14,7 @@ import {
   InputHighlightData,
   HighlightsIndex,
   HighlightStyle,
+  HighlightLabelStyle,
   ZoomValue,
   ZoomMode,
   ThumbnailOptions,
@@ -24,11 +25,22 @@ import { UnifiedLayerBuilder } from './core/unified-layer-builder';
 import { UnifiedInteractionHandler, InteractionCallbacks } from './core/interaction-handler';
 import { PerformanceOptimizer } from './core/performance-optimizer';
 import { buildHighlightsIndex } from './utils/highlight-adapter';
-import { applyLabelStyle, applyIconStyle, normalizeSize } from './utils/label-style';
-import { sanitizeIconHtml } from './utils/sanitize-icon-html';
+import {
+  applyHighlightVisualStyle,
+  getHighlightBaseOpacity,
+  getHighlightHoverOpacity,
+  resolveHighlightStyle,
+} from './utils/highlight-style';
+import {
+  appendLabelIcon,
+  applyBaseOutlineStyle,
+  applyLabelOutlineStyle,
+  applyLabelStyle,
+} from './utils/label-style';
 
 const CONTAINER_PADDING = 40;
 const ZOOM_STEP = 1.2;
+type EventCallback = (data?: unknown) => void;
 
 export class PDFHighlightViewer implements IPDFHighlightViewer {
   private pdfEngine: PDFEngine;
@@ -59,7 +71,7 @@ export class PDFHighlightViewer implements IPDFHighlightViewer {
   private pageDimensions = new Map<number, { width: number; height: number }>();
   private defaultPageHeight = 800;
 
-  private eventListeners: { event: string; callback: (...args: any[]) => void }[] = [];
+  private eventListeners: { event: string; callback: EventCallback }[] = [];
   private scrollListener: (() => void) | null = null;
   private analytics: HighlightAnalytics = {
     totalHighlights: 0,
@@ -858,7 +870,11 @@ export class PDFHighlightViewer implements IPDFHighlightViewer {
     this.emit('highlightRemoved', { termId, pages: Array.from(affectedPages) });
   }
 
-  updateHighlightStyle(termId: string, stylePatch: Partial<HighlightStyle>): void {
+  updateHighlightStyle(
+    termId: string,
+    stylePatch: Partial<HighlightStyle>,
+    labelStylePatch?: Partial<HighlightLabelStyle>
+  ): void {
     const prev = this.highlightsIndex.byId.get(termId);
     if (!prev) return;
 
@@ -868,6 +884,12 @@ export class PDFHighlightViewer implements IPDFHighlightViewer {
         ...(prev.style ?? {}),
         ...stylePatch,
       } as HighlightStyle,
+      labelStyle: labelStylePatch
+        ? {
+            ...(prev.labelStyle ?? {}),
+            ...labelStylePatch,
+          }
+        : prev.labelStyle,
     };
 
     const affectedPages = new Set<number>();
@@ -1328,11 +1350,11 @@ export class PDFHighlightViewer implements IPDFHighlightViewer {
   // Event Management
   // =============================================================================
 
-  addEventListener(event: string, callback: (...args: any[]) => void): void {
+  addEventListener(event: string, callback: EventCallback): void {
     this.eventListeners.push({ event, callback });
   }
 
-  removeEventListener(event: string, callback: (...args: any[]) => void): void {
+  removeEventListener(event: string, callback: EventCallback): void {
     const index = this.eventListeners.findIndex(
       (listener) => listener.event === event && listener.callback === callback
     );
@@ -1341,7 +1363,7 @@ export class PDFHighlightViewer implements IPDFHighlightViewer {
     }
   }
 
-  emit(event: string, data?: any): void {
+  emit(event: string, data?: unknown): void {
     this.eventListeners
       .filter((listener) => listener.event === event)
       .forEach((listener) => {
@@ -1451,9 +1473,7 @@ export class PDFHighlightViewer implements IPDFHighlightViewer {
 
       for (const highlight of this.highlightsIndex.highlights) {
         const style = highlight.style;
-        const backgroundColor = style?.backgroundColor ?? '#666666';
-        const borderColor = style?.borderColor ?? backgroundColor;
-        const borderWidth = style?.borderWidth ?? '1px';
+        const resolvedStyle = resolveHighlightStyle(style);
 
         for (let bboxIndex = 0; bboxIndex < highlight.bboxes.length; bboxIndex++) {
           const bbox = highlight.bboxes[bboxIndex];
@@ -1483,16 +1503,18 @@ export class PDFHighlightViewer implements IPDFHighlightViewer {
           highlightDiv.style.width = `${width}px`;
           highlightDiv.style.height = `${height}px`;
 
-          highlightDiv.style.backgroundColor = backgroundColor;
-          highlightDiv.style.border = `${borderWidth} solid ${borderColor}`;
-
           highlightDiv.style.pointerEvents = 'auto';
           highlightDiv.style.cursor = 'pointer';
           highlightDiv.style.boxSizing = 'border-box';
           highlightDiv.style.userSelect = 'none';
-          highlightDiv.style.mixBlendMode = 'multiply';
 
-          const baseOpacity = typeof style?.opacity === 'number' ? style.opacity : 0.3;
+          const highlightVisual = document.createElement('span');
+          highlightVisual.className = 'highlight-visual';
+          applyHighlightVisualStyle(highlightVisual, resolvedStyle);
+          applyBaseOutlineStyle(highlightVisual, style);
+          highlightDiv.appendChild(highlightVisual);
+
+          const baseOpacity = getHighlightBaseOpacity(style);
 
           const overlappingCount = this.countOverlappingHighlights(
             highlightLayer,
@@ -1504,50 +1526,86 @@ export class PDFHighlightViewer implements IPDFHighlightViewer {
             baseOpacity / Math.max(1, overlappingCount * 0.7)
           );
 
-          highlightDiv.style.opacity = effectiveOpacity.toString();
+          highlightVisual.style.opacity = effectiveOpacity.toString();
           highlightDiv.dataset.originalOpacity = effectiveOpacity.toString();
 
-          const hoverOpacity =
-            typeof style?.hoverOpacity === 'number'
-              ? style.hoverOpacity
-              : Math.min(0.6, effectiveOpacity + 0.2);
-
-          const labelColor = style?.borderColor ?? style?.backgroundColor ?? '#666666';
+          const hoverOpacity = getHighlightHoverOpacity(style, effectiveOpacity);
+          const termLabelsSelector = `.highlight-label[data-term-id="${highlight.id}"]`;
 
           highlightDiv.addEventListener('mouseenter', () => {
             if (this.options.highlightsConfig?.enableMultilineHover) {
               const same = highlightLayer.querySelectorAll(
                 `.highlight[data-term-id="${highlight.id}"]`
               );
-              same.forEach((el) => ((el as HTMLDivElement).style.opacity = String(hoverOpacity)));
+              same.forEach((el) => {
+                const htmlEl = el as HTMLDivElement;
+                const visual = htmlEl.querySelector<HTMLElement>('.highlight-visual');
+                if (visual) visual.style.opacity = String(hoverOpacity);
+              });
+              this.getLabelsForTerm(highlightLayer, highlight.id).forEach((sameLabel) => {
+                sameLabel.style.opacity = String(hoverOpacity);
+              });
 
               const other = highlightLayer.querySelectorAll(
                 `.highlight[data-term-id]:not([data-term-id="${highlight.id}"])`
               );
-              other.forEach((el) => ((el as HTMLDivElement).style.opacity = '0.1'));
+              other.forEach((el) => {
+                const htmlEl = el as HTMLDivElement;
+                const visual = htmlEl.querySelector<HTMLElement>('.highlight-visual');
+                if (visual) visual.style.opacity = '0.1';
+              });
+              highlightLayer
+                .querySelectorAll<HTMLElement>(
+                  `.highlight-label:not([data-term-id="${highlight.id}"])`
+                )
+                .forEach((otherLabel) => {
+                  otherLabel.style.opacity = '0.1';
+                });
             } else {
-              highlightDiv.style.opacity = String(hoverOpacity);
+              highlightVisual.style.opacity = String(hoverOpacity);
             }
-            const labelEl = highlightDiv.querySelector<HTMLElement>('.highlight-label');
-            if (labelEl) {
-              labelEl.style.borderColor = borderColor;
-            }
+            highlightLayer.querySelectorAll<HTMLElement>(termLabelsSelector).forEach((labelEl) => {
+              labelEl.style.opacity = String(hoverOpacity);
+            });
           });
 
           highlightDiv.addEventListener('mouseleave', () => {
             if (this.options.highlightsConfig?.enableMultilineHover) {
               const all = highlightLayer.querySelectorAll('.highlight[data-term-id]');
+              const baseOpacityByTermId = new Map<string, string>();
               all.forEach((el) => {
-                const original = (el as HTMLDivElement).dataset.originalOpacity ?? '0.3';
-                (el as HTMLDivElement).style.opacity = original;
+                const htmlEl = el as HTMLDivElement;
+                const original = htmlEl.dataset.originalOpacity ?? '0.3';
+                const visual = htmlEl.querySelector<HTMLElement>('.highlight-visual');
+                if (visual) visual.style.opacity = original;
+                const termId = htmlEl.getAttribute('data-term-id');
+                if (termId) {
+                  baseOpacityByTermId.set(termId, original);
+                }
               });
+              highlightLayer
+                .querySelectorAll<HTMLElement>('.highlight-label')
+                .forEach((allLabel) => {
+                  const allTermId = allLabel.getAttribute('data-term-id');
+                  if (!allTermId) return;
+                  const fallbackBaseOpacity = baseOpacityByTermId.get(allTermId);
+                  if (fallbackBaseOpacity !== undefined) {
+                    allLabel.style.opacity = fallbackBaseOpacity;
+                    return;
+                  }
+                  const allHighlight = this.getHighlightById(allTermId);
+                  allLabel.style.opacity = String(
+                    typeof allHighlight?.style?.opacity === 'number'
+                      ? allHighlight.style.opacity
+                      : 0.3
+                  );
+                });
             } else {
-              highlightDiv.style.opacity = highlightDiv.dataset.originalOpacity ?? '0.3';
+              highlightVisual.style.opacity = highlightDiv.dataset.originalOpacity ?? '0.3';
             }
-            const labelEl = highlightDiv.querySelector<HTMLElement>('.highlight-label');
-            if (labelEl) {
-              labelEl.style.borderColor = labelColor;
-            }
+            highlightLayer.querySelectorAll<HTMLElement>(termLabelsSelector).forEach((labelEl) => {
+              labelEl.style.opacity = String(effectiveOpacity);
+            });
           });
 
           highlightLayer.appendChild(highlightDiv);
@@ -1556,10 +1614,18 @@ export class PDFHighlightViewer implements IPDFHighlightViewer {
             const labelEl = document.createElement('span');
             labelEl.className = 'highlight-label';
             labelEl.setAttribute('data-term-id', highlight.id);
+            labelEl.setAttribute('data-bbox-index', String(bboxIndex));
+            labelEl.dataset.baseLeft = String(left);
+            labelEl.dataset.baseTop = String(top);
+            const { left: labelOffsetLeft, top: labelOffsetTop } = this.getLabelOffsets(
+              highlight.labelStyle
+            );
             labelEl.style.position = 'absolute';
-            labelEl.style.left = '0';
+            labelEl.style.left = `${left + labelOffsetLeft}px`;
+            labelEl.style.top = `${top + labelOffsetTop}px`;
+            labelEl.style.boxSizing = 'border-box';
+            labelEl.style.zIndex = '3';
             labelEl.style.transform = 'translateX(-100%)';
-            labelEl.style.top = '-1px';
             labelEl.style.display = 'flex';
             labelEl.style.alignItems = 'center';
             labelEl.style.justifyContent = 'flex-end';
@@ -1568,31 +1634,25 @@ export class PDFHighlightViewer implements IPDFHighlightViewer {
             labelEl.style.cursor = 'pointer';
             labelEl.style.whiteSpace = 'nowrap';
 
-            labelEl.style.border = `1px solid ${labelColor}`;
+            if (
+              highlight.labelStyle?.borderColor !== undefined ||
+              highlight.labelStyle?.borderWidth !== undefined
+            ) {
+              const borderColor = highlight.labelStyle?.borderColor ?? 'currentColor';
+              const borderWidth = highlight.labelStyle?.borderWidth ?? '1px';
+              labelEl.style.border = `${borderWidth} solid ${borderColor}`;
+            }
+            applyLabelOutlineStyle(labelEl, highlight.labelStyle);
 
             applyLabelStyle(labelEl, highlight.labelStyle);
+            labelEl.style.opacity = String(effectiveOpacity);
 
-            if (highlight.beforeIcon) {
-              const iconWrap = document.createElement('span');
-              iconWrap.className = 'highlight-label-icon';
-              iconWrap.innerHTML = sanitizeIconHtml(highlight.beforeIcon);
-              const svg = iconWrap.querySelector('svg');
-              if (svg) {
-                svg.removeAttribute('width');
-                svg.removeAttribute('height');
-              }
-              const iconSize = highlight.labelStyle?.iconSize;
-              const size = normalizeSize(iconSize);
-              iconWrap.style.width = size;
-              iconWrap.style.height = size;
-              applyIconStyle(iconWrap, highlight.labelStyle);
-              labelEl.appendChild(iconWrap);
-            }
+            appendLabelIcon(labelEl, highlight.beforeIcon, highlight.labelStyle);
             if (highlight.label) {
               labelEl.appendChild(document.createTextNode(highlight.label));
             }
 
-            highlightDiv.appendChild(labelEl);
+            highlightLayer.appendChild(labelEl);
           }
         }
       }
@@ -1621,6 +1681,19 @@ export class PDFHighlightViewer implements IPDFHighlightViewer {
     return this.getHighlightById(termId)?.style;
   }
 
+  private getLabelOffsets(style?: Partial<HighlightLabelStyle>): { left: number; top: number } {
+    return {
+      left: style?.offsetLeft ?? 0,
+      top: style?.offsetTop ?? -1,
+    };
+  }
+
+  private getLabelsForTerm(highlightLayer: Element, termId: string): HTMLElement[] {
+    return Array.from(
+      highlightLayer.querySelectorAll<HTMLElement>(`.highlight-label[data-term-id="${termId}"]`)
+    );
+  }
+
   private getHighlightElements(root: ParentNode, termId?: string): HTMLElement[] {
     const selector = termId
       ? `.highlight[data-term-id="${termId}"], .highlight-wrapper[data-term-id="${termId}"]`
@@ -1646,35 +1719,72 @@ export class PDFHighlightViewer implements IPDFHighlightViewer {
       const termId = el.getAttribute('data-term-id');
       if (!termId) return;
 
+      const highlight = this.getHighlightById(termId);
       const style = this.getHighlightStyle(termId);
-      const bg = style?.backgroundColor ?? el.style.backgroundColor ?? '#666666';
-      const borderColor = style?.borderColor ?? bg;
-      const borderWidth = style?.borderWidth ?? '1px';
+      const {
+        backgroundColor: bg,
+        borderColor,
+        borderWidth,
+      } = resolveHighlightStyle(style, el.style.backgroundColor || '#666666');
 
-      el.style.backgroundColor = bg;
-      el.style.border = `${borderWidth} solid ${borderColor}`;
+      const visual = el.querySelector<HTMLElement>('.highlight-visual') ?? el;
+      visual.style.backgroundColor = bg;
+      visual.style.border = `${borderWidth} solid ${borderColor}`;
+      applyBaseOutlineStyle(visual, style);
+      const highlightBaseOpacity =
+        typeof style?.opacity === 'number'
+          ? style.opacity
+          : parseFloat(el.dataset.originalOpacity ?? '0.3');
+
+      const bboxIdx = el.getAttribute('data-bbox-index');
+      const isWrapper = el.classList.contains('highlight-wrapper');
+      const labelStyle = highlight?.labelStyle;
+      const labelEl = isWrapper
+        ? el.querySelector<HTMLElement>('.highlight-label')
+        : bboxIdx !== null
+          ? highlightLayer.querySelector<HTMLElement>(
+              `.highlight-label[data-term-id="${termId}"][data-bbox-index="${bboxIdx}"]`
+            )
+          : highlightLayer.querySelector<HTMLElement>(`.highlight-label[data-term-id="${termId}"]`);
+      if (labelEl) {
+        if (!isWrapper) {
+          const baseLabelLeft = parseFloat(labelEl.dataset.baseLeft ?? '0');
+          const baseLabelTop = parseFloat(labelEl.dataset.baseTop ?? '0');
+          const { left: labelOffsetLeft, top: labelOffsetTop } = this.getLabelOffsets(labelStyle);
+          labelEl.style.left = `${baseLabelLeft + labelOffsetLeft}px`;
+          labelEl.style.top = `${baseLabelTop + labelOffsetTop}px`;
+        }
+        applyLabelStyle(labelEl, labelStyle);
+        applyLabelOutlineStyle(labelEl, labelStyle);
+        labelEl.style.opacity = String(highlightBaseOpacity);
+      }
 
       if (
         this.options.highlightsConfig?.enableMultilineHover &&
         hoveredIds &&
         Array.isArray(hoveredIds)
       ) {
-        const baseOpacity =
-          typeof style?.opacity === 'number'
-            ? style.opacity
-            : parseFloat(el.dataset.originalOpacity ?? '0.3');
+        const baseOpacity = style
+          ? getHighlightBaseOpacity(style)
+          : parseFloat(el.dataset.originalOpacity ?? '0.3');
 
-        const hoverOpacity =
-          typeof style?.hoverOpacity === 'number'
-            ? style.hoverOpacity
-            : Math.min(0.6, baseOpacity + 0.2);
+        const hoverOpacity = getHighlightHoverOpacity(style, baseOpacity);
 
         if (hoveredIds.includes(termId)) {
-          el.style.opacity = String(hoverOpacity);
+          visual.style.opacity = String(hoverOpacity);
+          if (labelEl) {
+            labelEl.style.opacity = String(hoverOpacity);
+          }
         } else if (hoveredIds.length > 0) {
-          el.style.opacity = '0.1';
+          visual.style.opacity = '0.1';
+          if (labelEl) {
+            labelEl.style.opacity = '0.1';
+          }
         } else {
-          el.style.opacity = String(baseOpacity);
+          visual.style.opacity = String(baseOpacity);
+          if (labelEl) {
+            labelEl.style.opacity = String(baseOpacity);
+          }
         }
       }
     });
@@ -1942,7 +2052,10 @@ export class PDFHighlightViewer implements IPDFHighlightViewer {
       // textLayer.style.opacity = '0.1'; // Uncomment for debugging text boundaries
 
       // Process text items with proper PDF coordinate transformation
-      textContent.items.forEach((item: any) => {
+      textContent.items.forEach((item) => {
+        if (!('str' in item) || !('transform' in item) || !('fontName' in item)) {
+          return;
+        }
         if (!item.str || !item.str.trim()) return; // Skip empty text
 
         const textSpan = document.createElement('span');
@@ -2048,7 +2161,7 @@ export class PDFHighlightViewer implements IPDFHighlightViewer {
    */
   private countOverlappingHighlights(
     highlightLayer: HTMLElement,
-    coord: any,
+    coord: BoundingBox,
     scale: number
   ): number {
     const targetLeft = coord.x1 * scale;

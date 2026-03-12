@@ -19,27 +19,61 @@ const initialHighlights: InputHighlightData[] = [
     id: 'red-zone',
     bboxOrigin: 'top-left',
     bboxes: [{ x1: 180, y1: 110, x2: 340, y2: 130, page: 1 }],
-    style: { backgroundColor: '#ff6b6b', opacity: 0.4 },
+    style: {
+      backgroundColor: 'transparent',
+      opacity: 1,
+      borderColor: '#ff6b6b',
+      borderWidth: '2px',
+      outline: '1px solid #e600ff',
+    },
     label: 'Red zone',
     beforeIcon: ICON_ALERT_CIRCLE_SVG,
     labelStyle: {
       fontSize: 10,
+      opacity: 1,
+      color: 'white',
       padding: '2px 4px',
+      borderRadius: '2px 0px 0px 2px',
       iconSize: 14,
-      iconColor: '#ff6b6b',
+      backgroundColor: '#ff6b6b',
+      iconColor: 'white',
+      outline: '1px solid #e600ff',
+      outlineRight: '1px solid #ff6b6b',
+      offsetTop: -1,
+      offsetLeft: 0,
     },
     tooltipText: 'Red highlight zone',
   },
   {
     id: 'blue-zone',
     bboxes: [{ x1: 30, y1: 140, x2: 400, y2: 164, page: 1 }],
-    style: { backgroundColor: '#4ecdc4', opacity: 0.4 },
+    style: { backgroundColor: '#4ecdc4', opacity: 0.4, borderWidth: '0px' },
+    label: 'Blue zone',
+    labelStyle: {
+      fontSize: 10,
+      padding: '2px 4px',
+      borderRadius: '2px',
+      borderWidth: '1px',
+      borderColor: '#4ecdc4',
+      offsetTop: 0,
+      offsetLeft: -3,
+    },
     tooltipText: 'Blue highlight zone',
   },
   {
     id: 'yellow-zone',
     bboxes: [{ x1: 100, y1: 200, x2: 350, y2: 220, page: 1 }],
-    style: { backgroundColor: '#ffe66d', opacity: 0.4 },
+    style: { backgroundColor: '#ffe66d', borderWidth: '2px', opacity: 0.4 },
+    label: 'Yellow zone',
+    labelStyle: {
+      backgroundColor: 'white',
+      fontSize: 10,
+      padding: '2px 4px',
+      borderWidth: '2px',
+      opacity: 1,
+      borderColor: '#ffe66d',
+    },
+
     tooltipText: 'Yellow highlight zone',
   },
   {
@@ -67,7 +101,7 @@ const initialHighlights: InputHighlightData[] = [
   },
 ];
 
-type UiEvent = { ts: number; event: string; data: any };
+type UiEvent = { id: number; ts: number; event: string; data: any };
 
 export const SimpleExample: React.FC = () => {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -95,11 +129,12 @@ export const SimpleExample: React.FC = () => {
   // Page thumbnails panel
   const [showThumbnailsPanel, setShowThumbnailsPanel] = useState(false);
   const [thumbnailDataUrls, setThumbnailDataUrls] = useState<Record<number, string>>({});
+  const eventIdRef = useRef(0);
 
   const pushEvent = useCallback(
     (event: string, data: any) => {
       setEvents((prev) => {
-        const next = [{ ts: Date.now(), event, data }, ...prev];
+        const next = [{ id: ++eventIdRef.current, ts: Date.now(), event, data }, ...prev];
         return next.slice(0, 60);
       });
 
@@ -184,6 +219,7 @@ export const SimpleExample: React.FC = () => {
       opacity: 0.35,
       borderColor: '#0f172a',
       borderWidth: '1px',
+      outline: '1px solid #14532d',
     };
 
     const h: InputHighlightData = {
@@ -235,6 +271,7 @@ export const SimpleExample: React.FC = () => {
         opacity: 0.15,
         borderColor: '#000000',
         borderWidth: '2px',
+        outline: '2px solid #ffffff',
       },
     };
 
@@ -748,7 +785,7 @@ export const SimpleExample: React.FC = () => {
         <div style={{ marginBottom: 8, opacity: 0.9 }}>Events (latest first)</div>
         {events.map((e) => (
           <div
-            key={e.ts + e.event}
+            key={e.id}
             style={{
               marginBottom: 10,
               borderBottom: '1px solid rgba(255,255,255,0.12)',

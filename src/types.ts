@@ -26,6 +26,7 @@ export interface HighlightStyle {
   backgroundColor: string;
   borderColor?: string;
   borderWidth?: string;
+  outline?: string;
   opacity?: number;
   hoverOpacity?: number;
   pulseAnimation?: boolean;
@@ -33,18 +34,26 @@ export interface HighlightStyle {
 
 export interface HighlightLabelStyle {
   fontSize?: string | number;
+  opacity?: number;
   color?: string;
   backgroundColor?: string;
   padding?: string;
+  /** Label border radius. Accepts CSS shorthand (e.g. '2px' or '2px 2px 0 0'). */
   borderRadius?: string;
   fontFamily?: string;
   fontWeight?: string | number;
   border?: string;
+  borderColor?: string;
+  borderWidth?: string;
+  outline?: string;
   whiteSpace?: string;
   /** Size for the icon before the label (e.g. '14px', 16). Used when beforeIcon is set. */
   iconSize?: string | number;
   /** Color for the icon (CSS value). Used for stroke/currentColor of the SVG when beforeIcon is set. */
   iconColor?: string;
+  offsetLeft?: number;
+  offsetTop?: number;
+  outlineRight?: string;
 }
 
 export interface BBoxDimensions {
