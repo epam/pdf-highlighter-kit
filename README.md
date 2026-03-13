@@ -82,6 +82,8 @@ Each highlight carries its own style. No categories are required.
 
 **Icon before label:** Optionally set `beforeIcon` to an inline SVG string (e.g. from [Tabler Icons](https://tabler.io/icons)) to render an icon inside the label frame, to the left of the text. The icon inherits the label color via `currentColor`. Use `labelStyle.iconSize` to set the icon size (e.g. `14` or `'14px'`) and `labelStyle.iconColor` to set the icon color (e.g. `'#ff6b6b'`); if `iconColor` is not set, the icon uses the label text color. Only pass trusted SVG content (e.g. from your bundle or `@tabler/icons`); in React with Vite you can use `import iconSvg from '@tabler/icons/icons/outline/alert-circle.svg?raw'` and pass `iconSvg` as `beforeIcon`.
 
+**Scalable label:** Set `isLabelScalable: true` on the highlight so the label’s size (font, padding, icon, border radius) scales with zoom; the label stays proportional to the highlight. Border and outline thickness are not scaled (they stay fixed like the highlight’s outline). Best used with `labelStyle` values in `px` or numbers.
+
 ```ts
 export interface BBox {
   x1: number;
@@ -139,6 +141,7 @@ export interface InputHighlightData {
   style?: HighlightStyle;
   label?: string;
   beforeIcon?: string; // inline SVG string (trusted content only, e.g. Tabler icons)
+  isLabelScalable?: boolean; // when true, label size scales with zoom (borders stay fixed)
   labelStyle?: HighlightLabelStyle;
   tooltipText?: string;
   metadata?: Record<string, any>;

@@ -71,6 +71,8 @@ export interface InputHighlightData {
   /** Inline SVG string (e.g. from Tabler) to render before the label inside the label frame. Use trusted content only. */
   beforeIcon?: string;
   labelStyle?: HighlightLabelStyle;
+  /** When true, label size (font, padding, icon, etc.) scales with zoom. Use with px/numeric values. */
+  isLabelScalable?: boolean;
   tooltipText?: string;
   metadata?: Record<string, any>;
 }
@@ -139,6 +141,7 @@ export interface Segment {
     label?: string;
     beforeIcon?: string;
     labelStyle?: HighlightLabelStyle;
+    isLabelScalable?: boolean;
   };
   transform: number[];
   fontName: string;

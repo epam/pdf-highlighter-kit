@@ -36,6 +36,7 @@ import {
   applyBaseOutlineStyle,
   applyLabelOutlineStyle,
   applyLabelStyle,
+  scaleLabelStyle,
 } from './utils/label-style';
 
 const CONTAINER_PADDING = 40;
@@ -1502,10 +1503,10 @@ export class PDFHighlightViewer implements IPDFHighlightViewer {
           highlightDiv.setAttribute('data-page', String(pageNumber));
           highlightDiv.setAttribute('data-bbox-index', String(bboxIndex));
 
-          const left = normalizedBBox.x1 * scale;
-          const top = normalizedBBox.y1 * scale;
-          const width = (normalizedBBox.x2 - normalizedBBox.x1) * scale;
-          const height = (normalizedBBox.y2 - normalizedBBox.y1) * scale;
+          const left = Math.round(normalizedBBox.x1 * scale);
+          const top = Math.round(normalizedBBox.y1 * scale);
+          const width = Math.round((normalizedBBox.x2 - normalizedBBox.x1) * scale);
+          const height = Math.round((normalizedBBox.y2 - normalizedBBox.y1) * scale);
 
           highlightDiv.style.position = 'absolute';
           highlightDiv.style.left = `${left}px`;
@@ -1621,15 +1622,18 @@ export class PDFHighlightViewer implements IPDFHighlightViewer {
           highlightLayer.appendChild(highlightDiv);
 
           if (highlight.label || highlight.beforeIcon) {
+            const effectiveLabelStyle =
+              highlight.isLabelScalable && scale !== 1
+                ? scaleLabelStyle(highlight.labelStyle, scale)
+                : highlight.labelStyle;
             const labelEl = document.createElement('span');
             labelEl.className = 'highlight-label';
             labelEl.setAttribute('data-term-id', highlight.id);
             labelEl.setAttribute('data-bbox-index', String(bboxIndex));
             labelEl.dataset.baseLeft = String(left);
             labelEl.dataset.baseTop = String(top);
-            const { left: labelOffsetLeft, top: labelOffsetTop } = this.getLabelOffsets(
-              highlight.labelStyle
-            );
+            const { left: labelOffsetLeft, top: labelOffsetTop } =
+              this.getLabelOffsets(effectiveLabelStyle);
             labelEl.style.position = 'absolute';
             labelEl.style.left = `${left + labelOffsetLeft}px`;
             labelEl.style.top = `${top + labelOffsetTop}px`;
@@ -1639,25 +1643,25 @@ export class PDFHighlightViewer implements IPDFHighlightViewer {
             labelEl.style.display = 'flex';
             labelEl.style.alignItems = 'center';
             labelEl.style.justifyContent = 'flex-end';
-            labelEl.style.gap = '4px';
+            labelEl.style.gap = highlight.isLabelScalable ? `${4 * scale}px` : '4px';
             labelEl.style.pointerEvents = 'auto';
             labelEl.style.cursor = 'pointer';
             labelEl.style.whiteSpace = 'nowrap';
 
             if (
-              highlight.labelStyle?.borderColor !== undefined ||
-              highlight.labelStyle?.borderWidth !== undefined
+              effectiveLabelStyle?.borderColor !== undefined ||
+              effectiveLabelStyle?.borderWidth !== undefined
             ) {
-              const borderColor = highlight.labelStyle?.borderColor ?? 'currentColor';
-              const borderWidth = highlight.labelStyle?.borderWidth ?? '1px';
+              const borderColor = effectiveLabelStyle?.borderColor ?? 'currentColor';
+              const borderWidth = effectiveLabelStyle?.borderWidth ?? '1px';
               labelEl.style.border = `${borderWidth} solid ${borderColor}`;
             }
-            applyLabelOutlineStyle(labelEl, highlight.labelStyle);
+            applyLabelOutlineStyle(labelEl, effectiveLabelStyle);
 
-            applyLabelStyle(labelEl, highlight.labelStyle);
+            applyLabelStyle(labelEl, effectiveLabelStyle);
             labelEl.style.opacity = String(effectiveOpacity);
 
-            appendLabelIcon(labelEl, highlight.beforeIcon, highlight.labelStyle);
+            appendLabelIcon(labelEl, highlight.beforeIcon, effectiveLabelStyle);
             if (highlight.label) {
               labelEl.appendChild(document.createTextNode(highlight.label));
             }
@@ -1748,7 +1752,11 @@ export class PDFHighlightViewer implements IPDFHighlightViewer {
 
       const bboxIdx = el.getAttribute('data-bbox-index');
       const isWrapper = el.classList.contains('highlight-wrapper');
-      const labelStyle = highlight?.labelStyle;
+      const scale = this.currentScale;
+      const effectiveLabelStyle =
+        highlight?.isLabelScalable && scale !== 1
+          ? scaleLabelStyle(highlight.labelStyle, scale)
+          : highlight?.labelStyle;
       const labelEl = isWrapper
         ? el.querySelector<HTMLElement>('.highlight-label')
         : bboxIdx !== null
@@ -1760,12 +1768,13 @@ export class PDFHighlightViewer implements IPDFHighlightViewer {
         if (!isWrapper) {
           const baseLabelLeft = parseFloat(labelEl.dataset.baseLeft ?? '0');
           const baseLabelTop = parseFloat(labelEl.dataset.baseTop ?? '0');
-          const { left: labelOffsetLeft, top: labelOffsetTop } = this.getLabelOffsets(labelStyle);
+          const { left: labelOffsetLeft, top: labelOffsetTop } =
+            this.getLabelOffsets(effectiveLabelStyle);
           labelEl.style.left = `${baseLabelLeft + labelOffsetLeft}px`;
           labelEl.style.top = `${baseLabelTop + labelOffsetTop}px`;
         }
-        applyLabelStyle(labelEl, labelStyle);
-        applyLabelOutlineStyle(labelEl, labelStyle);
+        applyLabelStyle(labelEl, effectiveLabelStyle);
+        applyLabelOutlineStyle(labelEl, effectiveLabelStyle);
         labelEl.style.opacity = String(highlightBaseOpacity);
       }
 
