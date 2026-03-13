@@ -145,3 +145,49 @@ export function normalizeSize(iconSize?: number | string): string {
   if (typeof iconSize === 'number') return `${iconSize}px`;
   return String(iconSize);
 }
+
+/** Scales every "Npx" in a CSS string by scale (e.g. "2px 4px" → "4px 8px" at scale 2). */
+function scaleCssPx(value: string, scale: number): string {
+  return value.replace(
+    /(\d+(?:\.\d+)?)px/gi,
+    (_, n) => `${Math.round(parseFloat(n) * scale * 100) / 100}px`
+  );
+}
+
+/** Keys scaled as number or "Npx" string (fontSize, iconSize). Offsets are not scaled to avoid 1px jump when zooming. */
+const SCALABLE_NUMERIC_KEYS = ['fontSize', 'iconSize'] as const;
+
+/** Keys scaled as CSS string (block size / shape only; borders are not scaled, like the highlight). */
+const SCALABLE_CSS_PX_KEYS = ['padding', 'borderRadius'] as const;
+
+function scaleNumericValue(value: string | number, scale: number): string | number {
+  if (typeof value === 'number') return Math.round(value * scale * 100) / 100;
+  return scaleCssPx(String(value), scale);
+}
+
+/**
+ * Returns a new label style with block size and content scaled by `scale`.
+ * Used when isLabelScalable is true so the label scales with zoom.
+ * Scales: fontSize, iconSize, padding, borderRadius. Does not scale offsetLeft/offsetTop (avoids 1px jump when zooming) or borders.
+ */
+export function scaleLabelStyle(
+  style: HighlightLabelStyle | undefined,
+  scale: number
+): HighlightLabelStyle | undefined {
+  if (!style || scale === 1) return style;
+
+  const out: HighlightLabelStyle = {};
+
+  for (const key of SCALABLE_NUMERIC_KEYS) {
+    const value = style[key];
+    if (value == null) continue;
+    (out as Record<string, unknown>)[key] = scaleNumericValue(value, scale);
+  }
+  for (const key of SCALABLE_CSS_PX_KEYS) {
+    const value = style[key];
+    if (value == null) continue;
+    (out as Record<string, unknown>)[key] = scaleCssPx(value, scale);
+  }
+
+  return { ...style, ...out };
+}

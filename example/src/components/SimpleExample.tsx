@@ -28,6 +28,7 @@ const initialHighlights: InputHighlightData[] = [
     },
     label: 'Red zone',
     beforeIcon: ICON_ALERT_CIRCLE_SVG,
+    isLabelScalable: true,
     labelStyle: {
       fontSize: 10,
       opacity: 1,

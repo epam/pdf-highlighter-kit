@@ -12,6 +12,7 @@ import {
   applyBaseOutlineStyle,
   applyLabelOutlineStyle,
   applyLabelStyle,
+  scaleLabelStyle,
 } from '../utils/label-style';
 import {
   getHighlightBaseOpacity,
@@ -26,6 +27,7 @@ interface ItemHighlight {
   label?: string;
   beforeIcon?: string;
   labelStyle?: HighlightLabelStyle;
+  isLabelScalable?: boolean;
 }
 
 export class UnifiedLayerBuilder {
@@ -80,6 +82,7 @@ export class UnifiedLayerBuilder {
           label: h.label,
           beforeIcon: h.beforeIcon,
           labelStyle: h.labelStyle,
+          isLabelScalable: h.isLabelScalable,
           coordinates: { x1: b.x1, y1: b.y1, x2: b.x2, y2: b.y2 },
         });
       }
@@ -146,6 +149,7 @@ export class UnifiedLayerBuilder {
         label: primary.label,
         beforeIcon: primary.beforeIcon,
         labelStyle: primary.labelStyle,
+        isLabelScalable: primary.isLabelScalable,
       },
       transform: textItem.transform,
       fontName: textItem.fontName,
@@ -231,15 +235,19 @@ export class UnifiedLayerBuilder {
 
     // Label first (left of highlight), then inner container: background + text
     if (segment.highlightInfo?.label || segment.highlightInfo?.beforeIcon) {
+      const effectiveLabelStyle =
+        segment.highlightInfo.isLabelScalable && scale !== 1
+          ? scaleLabelStyle(segment.highlightInfo.labelStyle, scale)
+          : segment.highlightInfo.labelStyle;
       const labelEl = document.createElement('span');
       labelEl.className = 'highlight-label';
       labelEl.style.display = 'inline-flex';
       labelEl.style.alignItems = 'center';
-      labelEl.style.gap = '4px';
-      applyLabelStyle(labelEl, segment.highlightInfo.labelStyle);
-      applyLabelOutlineStyle(labelEl, segment.highlightInfo.labelStyle);
+      labelEl.style.gap = segment.highlightInfo.isLabelScalable ? `${4 * scale}px` : '4px';
+      applyLabelStyle(labelEl, effectiveLabelStyle);
+      applyLabelOutlineStyle(labelEl, effectiveLabelStyle);
 
-      appendLabelIcon(labelEl, segment.highlightInfo.beforeIcon, segment.highlightInfo.labelStyle);
+      appendLabelIcon(labelEl, segment.highlightInfo.beforeIcon, effectiveLabelStyle);
       if (segment.highlightInfo.label) {
         const textNode = document.createTextNode(segment.highlightInfo.label);
         labelEl.appendChild(textNode);
