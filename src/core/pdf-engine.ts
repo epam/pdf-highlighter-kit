@@ -52,6 +52,7 @@ export class PDFEngine {
 
   async loadDocument(source: string | ArrayBuffer | Blob): Promise<void> {
     try {
+      this.thumbnailCache.clear();
       const sourceType = detectPDFSourceType(source);
 
       if (sourceType === 'base64') {
