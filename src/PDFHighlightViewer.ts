@@ -979,6 +979,8 @@ export class PDFHighlightViewer implements IPDFHighlightViewer {
   private async reRenderVisiblePages(): Promise<void> {
     if (!this.container) return;
 
+    const pageToKeep = this.currentPage;
+
     console.log('Zoom changed to:', this.currentScale);
 
     // Clear ALL cached data for the new scale
@@ -1014,14 +1016,22 @@ export class PDFHighlightViewer implements IPDFHighlightViewer {
     this.viewportManager.updateDimensions(this.container?.clientHeight || 600, avgPageHeight);
 
     // Render currently visible pages
-    const scrollTop = this.container.scrollTop;
     const containerHeight = this.container.clientHeight;
-    const visiblePages = this.viewportManager.getVisiblePages(scrollTop, containerHeight);
 
-    console.log('Re-rendering visible pages at new scale:', visiblePages);
+    // Restore scroll so we stay on the same page after zoom
+    this.container.scrollTop = this.getPageScrollTop(pageToKeep);
+
+    // Recompute visible pages after scroll restore for correct rendering
+    const scrollTopAfterRestore = this.container.scrollTop;
+    const visiblePagesAfterRestore = this.viewportManager.getVisiblePages(
+      scrollTopAfterRestore,
+      containerHeight
+    );
+
+    console.log('Re-rendering visible pages at new scale:', visiblePagesAfterRestore);
 
     // Render visible pages immediately
-    for (const pageNumber of visiblePages) {
+    for (const pageNumber of visiblePagesAfterRestore) {
       try {
         await this.renderPage(pageNumber);
       } catch (error) {
