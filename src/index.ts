@@ -7,6 +7,7 @@ export type { PDFHighlightViewer as IPDFHighlightViewer } from './api';
 
 export type {
   ViewerOptions,
+  LoadPDFOptions,
   BBoxOrigin,
   InputHighlightData,
   BBox,

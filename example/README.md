@@ -98,9 +98,9 @@ Initialize the viewer with a container element and optional configuration.
 
 ### Document Management
 
-#### `loadPDF(source: string | ArrayBuffer | Blob): Promise<void>`
+#### `loadPDF(source: string | ArrayBuffer | Blob, options?: LoadPDFOptions): Promise<void>`
 
-Load a PDF document from various sources.
+Load a PDF document from various sources. Optional second argument: `{ selectedPages?: number[] }` to show only the listed document pages (1-based). Example: `loadPDF(url, { selectedPages: [1, 3, 5] })`.
 
 #### `setPage(pageNumber: number): void`
 

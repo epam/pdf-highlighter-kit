@@ -1,5 +1,6 @@
 import {
   ViewerOptions,
+  LoadPDFOptions,
   TextRange,
   SelectionWithMetadata,
   PerformanceMetrics,
@@ -16,7 +17,7 @@ import {
 export interface PDFHighlightViewer {
   init(container: HTMLElement, options?: ViewerOptions): Promise<void>;
 
-  loadPDF(source: string | ArrayBuffer | Blob): Promise<void>;
+  loadPDF(source: string | ArrayBuffer | Blob, options?: LoadPDFOptions): Promise<void>;
 
   preloadPages(pageNumbers: number[]): Promise<void>;
 

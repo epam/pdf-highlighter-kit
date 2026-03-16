@@ -90,6 +90,7 @@ export interface ViewportManager {
   queuePagesForRendering(pages: number[], priority: Priority): void;
   unloadDistantPages(currentPage: number, threshold: number): void;
   setTotalPages(totalPages: number): void;
+  setSelectedPages(pages: number[] | null): void;
   getRenderingStrategy(
     scrollTop: number,
     containerHeight: number
@@ -291,6 +292,12 @@ export interface HighlightsConfig {
 
 export type BBoxOrigin = 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right';
 
+/** Options passed when loading a PDF (e.g. to override selected pages per load). */
+export interface LoadPDFOptions {
+  /** Only show these document page numbers (1-based). If empty or omitted, all pages are shown. */
+  selectedPages?: number[];
+}
+
 export interface ViewerOptions {
   enableTextSelection?: boolean;
   enableVirtualScrolling?: boolean;
@@ -302,6 +309,8 @@ export interface ViewerOptions {
   highlightsConfig?: HighlightsConfig;
   bboxOrigin?: BBoxOrigin;
   bboxSourceDimensions?: BBoxDimensions;
+  /** Only show these document page numbers (1-based). If empty or omitted, all pages are shown. */
+  selectedPages?: number[];
 }
 
 export interface ThumbnailOptions {

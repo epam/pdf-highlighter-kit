@@ -1,6 +1,7 @@
 import { PDFHighlightViewer as IPDFHighlightViewer } from './api';
 import {
   ViewerOptions,
+  LoadPDFOptions,
   BBoxOrigin,
   BBox,
   BBoxDimensions,
@@ -64,6 +65,10 @@ export class PDFHighlightViewer implements IPDFHighlightViewer {
   private currentPage = 1;
   private currentScale = 1.5;
   private totalPages = 0;
+  /** Actual number of pages in the loaded PDF (1..documentNumPages). */
+  private documentNumPages = 0;
+  /** When set, only these physical page numbers are shown; null = all pages. */
+  private selectedPages: number[] | null = null;
   private selectedTermId: string | null = null;
   private isInitialized = false;
 
@@ -439,23 +444,29 @@ export class PDFHighlightViewer implements IPDFHighlightViewer {
    * Handle keyboard navigation
    */
   private handleKeyboardNavigation(event: KeyboardEvent): void {
+    const displayed = this.getDisplayedPageList();
+    if (displayed.length === 0) return;
+
+    const currentIdx = displayed.indexOf(this.currentPage);
+    const idx = currentIdx >= 0 ? currentIdx : 0;
+
     switch (event.key) {
       case 'PageDown':
       case 'ArrowDown':
-        this.setPage(Math.min(this.totalPages, this.currentPage + 1));
+        if (idx < displayed.length - 1) this.setPage(displayed[idx + 1]);
         event.preventDefault();
         break;
       case 'PageUp':
       case 'ArrowUp':
-        this.setPage(Math.max(1, this.currentPage - 1));
+        if (idx > 0) this.setPage(displayed[idx - 1]);
         event.preventDefault();
         break;
       case 'Home':
-        this.setPage(1);
+        this.setPage(displayed[0]);
         event.preventDefault();
         break;
       case 'End':
-        this.setPage(this.totalPages);
+        this.setPage(displayed[displayed.length - 1]);
         event.preventDefault();
         break;
       case '+':
@@ -474,25 +485,31 @@ export class PDFHighlightViewer implements IPDFHighlightViewer {
   // PDF Management
   // =============================================================================
 
-  async loadPDF(source: string | ArrayBuffer | Blob): Promise<void> {
+  async loadPDF(source: string | ArrayBuffer | Blob, options?: LoadPDFOptions): Promise<void> {
     if (!this.isInitialized) {
       throw new Error('Viewer must be initialized before loading PDF');
     }
 
     try {
-      // Load document with PDF engine
       await this.pdfEngine.loadDocument(source);
 
       const docInfo = this.pdfEngine.getDocumentInfo();
-      this.totalPages = docInfo.numPages;
+      this.documentNumPages = docInfo.numPages;
 
-      // Update viewport manager with total pages
+      const rawSelected = options?.selectedPages ?? this.options.selectedPages;
+      const selectedPages = this.normalizeSelectedPages(rawSelected, this.documentNumPages);
+
+      this.selectedPages = selectedPages;
+      this.totalPages = selectedPages !== null ? selectedPages.length : this.documentNumPages;
+
+      this.viewportManager.setSelectedPages(selectedPages);
       this.viewportManager.setTotalPages(this.totalPages);
 
-      // Create page containers
       await this.createPageContainers();
 
-      // Load initial pages
+      const displayed = this.getDisplayedPageList();
+      this.currentPage = displayed.length > 0 ? displayed[0] : 1;
+
       await this.loadInitialPages();
 
       if (this.options.enableVirtualScrolling === false) {
@@ -507,19 +524,49 @@ export class PDFHighlightViewer implements IPDFHighlightViewer {
   }
 
   /**
-   * Create DOM containers for all pages with real PDF dimensions
+   * Normalize selectedPages: filter to 1..numPages, dedupe, sort. Empty result => null (show all).
+   */
+  private normalizeSelectedPages(
+    raw: number[] | undefined | null,
+    numPages: number
+  ): number[] | null {
+    if (!raw || raw.length === 0) return null;
+    const set = new Set<number>();
+    for (const p of raw) {
+      if (Number.isInteger(p) && p >= 1 && p <= numPages) set.add(p);
+    }
+    if (set.size === 0) return null;
+    return Array.from(set).sort((a, b) => a - b);
+  }
+
+  /** List of physical page numbers to display (either selectedPages or 1..documentNumPages). */
+  private getDisplayedPageList(): number[] {
+    if (this.selectedPages !== null && this.selectedPages.length > 0) {
+      return this.selectedPages;
+    }
+    const list: number[] = [];
+    for (let i = 1; i <= this.documentNumPages; i++) {
+      list.push(i);
+    }
+    return list;
+  }
+
+  /**
+   * Create DOM containers for displayed pages only (selectedPages or all)
    */
   private async createPageContainers(): Promise<void> {
     if (!this.pdfContainer) return;
 
-    // Clear existing containers
     this.pdfContainer.innerHTML = '';
     this.pageContainers.clear();
 
-    const firstPageDimensions = await this.getPageDimensions(1);
+    const displayed = this.getDisplayedPageList();
+    if (displayed.length === 0) return;
+
+    const firstPageDimensions = await this.getPageDimensions(displayed[0]);
     const avgPageHeight = firstPageDimensions.height;
 
-    for (let pageNumber = 1; pageNumber <= this.totalPages; pageNumber++) {
+    for (const pageNumber of displayed) {
       const pageContainer = document.createElement('div');
       pageContainer.className = 'pdf-page-container';
       pageContainer.setAttribute('data-page-number', pageNumber.toString());
@@ -534,7 +581,6 @@ export class PDFHighlightViewer implements IPDFHighlightViewer {
       this.pageContainers.set(pageNumber, pageContainer);
     }
 
-    // Update viewport manager with real page dimensions
     this.viewportManager.updateDimensions(this.container?.clientHeight || 600, avgPageHeight);
   }
 
@@ -544,20 +590,19 @@ export class PDFHighlightViewer implements IPDFHighlightViewer {
   private async loadInitialPages(): Promise<void> {
     if (!this.container) return;
 
-    // Get what should be visible at the top
     const visiblePages = this.viewportManager.getVisiblePages(0, this.container.clientHeight);
+    const firstPage = this.getDisplayedPageList()[0];
+    if (firstPage === undefined) return;
 
-    // Load first page immediately
     try {
-      await this.renderPage(1);
+      await this.renderPage(firstPage);
     } catch (error) {
       console.error('Failed to load initial page:', error);
     }
 
-    // Load other visible pages with small delay
     setTimeout(() => {
       visiblePages
-        .filter((page) => page > 1)
+        .filter((page) => page !== firstPage)
         .forEach((pageNumber) => {
           this.renderPage(pageNumber).catch((error) => {
             console.error(`Failed to load initial page ${pageNumber}:`, error);
@@ -567,20 +612,20 @@ export class PDFHighlightViewer implements IPDFHighlightViewer {
   }
 
   private async renderAllPagesBatched(batchSize = 2): Promise<void> {
-    for (let i = 1; i <= this.totalPages; i += batchSize) {
+    const displayed = this.getDisplayedPageList();
+    for (let i = 0; i < displayed.length; i += batchSize) {
       const batch: Promise<void>[] = [];
-
-      for (let j = i; j < i + batchSize && j <= this.totalPages; j++) {
-        const pageContainer = this.pageContainers.get(j);
+      for (let j = i; j < i + batchSize && j < displayed.length; j++) {
+        const pageNumber = displayed[j];
+        const pageContainer = this.pageContainers.get(pageNumber);
         if (pageContainer && !pageContainer.classList.contains('rendered')) {
           batch.push(
-            this.renderPage(j).catch((error) => {
-              console.debug(`Failed to render page ${j}:`, error);
+            this.renderPage(pageNumber).catch((error) => {
+              console.debug(`Failed to render page ${pageNumber}:`, error);
             })
           );
         }
       }
-
       await Promise.all(batch);
       await new Promise((r) => setTimeout(r, 0));
     }
@@ -644,7 +689,8 @@ export class PDFHighlightViewer implements IPDFHighlightViewer {
   }
 
   setPage(pageNumber: number): void {
-    if (pageNumber < 1 || pageNumber > this.totalPages) return;
+    const displayed = this.getDisplayedPageList();
+    if (!displayed.includes(pageNumber)) return;
 
     if (this.container) {
       this.container.scrollTop = this.getPageScrollTop(pageNumber);
@@ -1895,10 +1941,10 @@ export class PDFHighlightViewer implements IPDFHighlightViewer {
     };
   }
   /**
-   * Build spatial indices for all pages
+   * Build spatial indices for displayed pages only
    */
   private buildAllSpatialIndices(): void {
-    for (let pageNumber = 1; pageNumber <= this.totalPages; pageNumber++) {
+    for (const pageNumber of this.getDisplayedPageList()) {
       this.buildSpatialIndexForPage(pageNumber);
     }
   }

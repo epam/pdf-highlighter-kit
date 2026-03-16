@@ -201,8 +201,13 @@ export interface ViewerOptions {
 
   // Page dimensions for which bbox coordinates were calculated
   bboxSourceDimensions?: BBoxDimensions;
+
+  // Only show these document page numbers (1-based). If empty or omitted, all pages are shown.
+  selectedPages?: number[];
 }
 ```
+
+**Displaying only selected pages:** Use `selectedPages` to show a subset of the document (e.g. `[1, 3, 5]` or `[2, 4, 6, 8]`). The full PDF is still loaded; only the listed pages get DOM containers and participate in scrolling and rendering. Page numbers in the API (e.g. `setPage`, events, highlights) remain physical document page numbers. You can pass `selectedPages` in `init` options or per load via `loadPDF(source, { selectedPages })`; the latter overrides the init value for that load. `getTotalPages()` returns the length of the displayed list when `selectedPages` is set.
 
 ## API Reference
 
@@ -212,9 +217,18 @@ export interface ViewerOptions {
 
 Initialize the viewer with a container element and optional configuration.
 
-#### `loadPDF(source: string | ArrayBuffer | Blob): Promise<void>`
+#### `loadPDF(source: string | ArrayBuffer | Blob, options?: LoadPDFOptions): Promise<void>`
 
-Load a PDF document from URL or ArrayBuffer.
+Load a PDF document from URL or ArrayBuffer. Optional second argument:
+
+```ts
+interface LoadPDFOptions {
+  /** Only show these document page numbers (1-based). If empty or omitted, all pages are shown. */
+  selectedPages?: number[];
+}
+```
+
+Example: `await viewer.loadPDF(url, { selectedPages: [1, 3, 5] });` shows only pages 1, 3, and 5. When `options.selectedPages` is provided, it overrides `ViewerOptions.selectedPages` for this load.
 
 #### `loadHighlights(highlights: InputHighlightData[]): void`
 
