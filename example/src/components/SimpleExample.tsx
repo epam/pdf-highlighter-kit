@@ -14,6 +14,34 @@ const PDF_URL = 'https://ontheline.trincoll.edu/images/bookdown/sample-local-pdf
 const ICON_ALERT_CIRCLE_SVG =
   '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 8v4"/><path d="M12 16h.01"/><circle cx="12" cy="12" r="10"/></svg>';
 
+const RANDOM_HIGHLIGHT_STYLES = [
+  {
+    fill: '#22c55e',
+    border: '#14532d',
+    outline: '#052e16',
+  },
+  {
+    fill: '#f97316',
+    border: '#9a3412',
+    outline: '#7c2d12',
+  },
+  {
+    fill: '#0ea5e9',
+    border: '#075985',
+    outline: '#082f49',
+  },
+  {
+    fill: '#e879f9',
+    border: '#a21caf',
+    outline: '#701a75',
+  },
+  {
+    fill: '#facc15',
+    border: '#a16207',
+    outline: '#713f12',
+  },
+] as const;
+
 const initialHighlights: InputHighlightData[] = [
   {
     id: 'red-zone',
@@ -212,20 +240,27 @@ export const SimpleExample: React.FC = () => {
     const viewer = viewerRef.current;
     if (!viewer) return;
 
-    const page = viewer.getCurrentPage?.() ?? currentPage ?? 1;
+    const pageCount = Math.max(viewer.getTotalPages?.() ?? totalPages ?? 1, 1);
+    const page = Math.floor(Math.random() * pageCount) + 1;
     const id = `rand-${Date.now()}`;
+    const palette =
+      RANDOM_HIGHLIGHT_STYLES[Math.floor(Math.random() * RANDOM_HIGHLIGHT_STYLES.length)];
+    const width = 90 + Math.floor(Math.random() * 180);
+    const height = 18 + Math.floor(Math.random() * 28);
+    const x1 = 30 + Math.floor(Math.random() * 260);
+    const y1 = 60 + Math.floor(Math.random() * 600);
 
     const style: HighlightStyle = {
-      backgroundColor: '#22c55e',
-      opacity: 0.35,
-      borderColor: '#0f172a',
+      backgroundColor: palette.fill,
+      opacity: 0.2 + Math.random() * 0.35,
+      borderColor: palette.border,
       borderWidth: '1px',
-      outline: '1px solid #14532d',
+      outline: `1px solid ${palette.outline}`,
     };
 
     const h: InputHighlightData = {
       id,
-      bboxes: [{ x1: 80, y1: 120, x2: 280, y2: 145, page }],
+      bboxes: [{ x1, y1, x2: x1 + width, y2: y1 + height, page }],
       style,
       tooltipText: `Random on page ${page}`,
       metadata: { source: 'ui' },
@@ -238,8 +273,8 @@ export const SimpleExample: React.FC = () => {
     }
 
     setHighlights((prev) => [...prev, h]);
-    pushEvent('ui.addRandomHighlight', { id, page });
-  }, [currentPage, highlights, pushEvent]);
+    pushEvent('ui.addRandomHighlight', { id, page, x1, y1, width, height, color: palette.fill });
+  }, [highlights, pushEvent, totalPages]);
 
   const removeLastHighlight = useCallback(() => {
     const viewer = viewerRef.current;
@@ -347,6 +382,10 @@ export const SimpleExample: React.FC = () => {
           },
         });
 
+        if (!mounted) {
+          return;
+        }
+
         const on = (event: string) => (data: any) => {
           pushEvent(event, data);
 
@@ -413,6 +452,11 @@ export const SimpleExample: React.FC = () => {
         listeners.forEach(({ event, cb }) => viewer!.addEventListener(event, cb));
 
         await viewer.loadPDF(PDF_URL);
+
+        if (!mounted) {
+          return;
+        }
+
         viewer.loadHighlights(highlights);
 
         if (mounted) {
@@ -428,11 +472,10 @@ export const SimpleExample: React.FC = () => {
 
     return () => {
       mounted = false;
-      if (viewer) viewer.destroy();
-      if (viewerRef.current) {
-        viewerRef.current.destroy();
+      if (viewerRef.current === viewer) {
         viewerRef.current = null;
       }
+      if (viewer) viewer.destroy();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initKey]);
