@@ -9,7 +9,7 @@ function setStyle(
 ): void {
   if (value == null) return;
   const final = transform ? transform(value) : String(value);
-  (el.style as unknown as Record<string, string>)[key as string] = final;
+  (el.style as CSSStyleDeclaration & Record<string, string>)[key as string] = final;
 }
 
 const DIRECT_LABEL_STYLE_KEYS = [
@@ -177,16 +177,17 @@ export function scaleLabelStyle(
   if (!style || scale === 1) return style;
 
   const out: HighlightLabelStyle = {};
+  const outRecord = out as HighlightLabelStyle & Record<string, string | number | undefined>;
 
   for (const key of SCALABLE_NUMERIC_KEYS) {
     const value = style[key];
     if (value == null) continue;
-    (out as Record<string, unknown>)[key] = scaleNumericValue(value, scale);
+    outRecord[key] = scaleNumericValue(value, scale);
   }
   for (const key of SCALABLE_CSS_PX_KEYS) {
     const value = style[key];
     if (value == null) continue;
-    (out as Record<string, unknown>)[key] = scaleCssPx(value, scale);
+    outRecord[key] = scaleCssPx(value, scale);
   }
 
   return { ...style, ...out };

@@ -74,7 +74,7 @@ export interface InputHighlightData {
   /** When true, label size (font, padding, icon, etc.) scales with zoom. Use with px/numeric values. */
   isLabelScalable?: boolean;
   tooltipText?: string;
-  metadata?: Record<string, any>;
+  metadata?: Record<string, unknown>;
 }
 
 export interface RenderingQueue {
@@ -120,7 +120,7 @@ export interface BoundingBox {
 
 export interface TextContent {
   items: TextItem[];
-  styles: any;
+  styles: unknown;
 }
 
 export interface TextItem {
@@ -244,7 +244,7 @@ export interface RenderCompleteEvent {
 export interface PerformanceWarningEvent {
   type: string;
   message: string;
-  metrics: any;
+  metrics: unknown;
 }
 
 export interface MemoryMetrics {
@@ -265,7 +265,7 @@ export interface PerformanceMetrics {
 export interface UserAction {
   type: string;
   timestamp: number;
-  data: any;
+  data: unknown;
 }
 
 export interface HighlightAnalytics {
@@ -281,7 +281,7 @@ export interface Page {
   textContent?: TextContent;
   rendered: boolean;
   loading: boolean;
-  viewport?: any;
+  viewport?: unknown;
   scale?: number;
 }
 
@@ -291,6 +291,7 @@ export interface HighlightsConfig {
 }
 
 export type BBoxOrigin = 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right';
+export type PDFSource = string | ArrayBuffer | Blob;
 
 /** Options passed when loading a PDF (e.g. to override selected pages per load). */
 export interface LoadPDFOptions {
@@ -331,7 +332,7 @@ export interface AccessibilityFeatures {
 
 export interface HeavyTask {
   type: 'text-extraction' | 'highlight-processing' | 'spatial-indexing';
-  data: any;
+  data: unknown;
   pageNumber?: number;
 }
 
@@ -343,9 +344,9 @@ export interface SpatialHit {
 }
 
 export interface RTree {
-  insert(bounds: BoundingBox, data: any): void;
-  search(bounds: BoundingBox): any[];
-  remove(bounds: BoundingBox, data: any): void;
+  insert(bounds: BoundingBox, data: SpatialHit): void;
+  search(bounds: BoundingBox): SpatialHit[];
+  remove(bounds: BoundingBox, data: SpatialHit): void;
 }
 
 export interface EventSystem {

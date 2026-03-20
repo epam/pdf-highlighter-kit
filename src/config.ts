@@ -15,13 +15,21 @@ export const defaultConfig: PDFViewerConfig = {
   cdnFallback: true,
 };
 
+interface PDFJSWindow {
+  pdfjsLib?: {
+    GlobalWorkerOptions?: {
+      workerSrc?: string;
+    };
+  };
+}
+
 let globalConfig: PDFViewerConfig = { ...defaultConfig };
 
 export function configurePDFViewer(config: Partial<PDFViewerConfig>): void {
   globalConfig = { ...globalConfig, ...config };
 
   if (config.workerSrc !== undefined && typeof window !== 'undefined') {
-    const pdfjsLib = (window as any).pdfjsLib;
+    const pdfjsLib = (window as Window & PDFJSWindow).pdfjsLib;
     if (pdfjsLib && pdfjsLib.GlobalWorkerOptions) {
       pdfjsLib.GlobalWorkerOptions.workerSrc = config.workerSrc || getDefaultWorkerSrc();
     }

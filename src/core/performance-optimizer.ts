@@ -8,19 +8,19 @@ import {
 } from '../types';
 
 export interface SpatialIndex {
-  insert(bounds: BoundingBox, data: any): void;
-  search(bounds: BoundingBox): any[];
-  remove(bounds: BoundingBox, data: any): void;
+  insert(bounds: BoundingBox, data: SpatialHit): void;
+  search(bounds: BoundingBox): SpatialHit[];
+  remove(bounds: BoundingBox, data: SpatialHit): void;
   clear(): void;
 }
 
 export class RTree implements SpatialIndex {
-  private root: RTreeNode | null = null;
+  private root: RTreeNode<SpatialHit> | null = null;
   private maxEntries = 9;
   private minEntries = 4;
 
-  insert(bounds: BoundingBox, data: any): void {
-    const item: RTreeItem = { bounds, data };
+  insert(bounds: BoundingBox, data: SpatialHit): void {
+    const item: RTreeItem<SpatialHit> = { bounds, data };
 
     if (!this.root) {
       this.root = {
@@ -31,7 +31,7 @@ export class RTree implements SpatialIndex {
       return;
     }
 
-    const insertPath: RTreeNode[] = [];
+    const insertPath: RTreeNode<SpatialHit>[] = [];
     const node = this._chooseSubtree(bounds, this.root, insertPath);
 
     node.children.push(item);
@@ -42,18 +42,18 @@ export class RTree implements SpatialIndex {
     }
   }
 
-  search(bounds: BoundingBox): any[] {
+  search(bounds: BoundingBox): SpatialHit[] {
     if (!this.root) return [];
 
-    const result: any[] = [];
+    const result: SpatialHit[] = [];
     this._search(bounds, this.root, result);
     return result;
   }
 
-  remove(bounds: BoundingBox, data: any): void {
+  remove(bounds: BoundingBox, data: SpatialHit): void {
     if (!this.root) return;
 
-    const path: RTreeNode[] = [];
+    const path: RTreeNode<SpatialHit>[] = [];
     const item = this._findItem(bounds, data, this.root, path);
 
     if (item) {
@@ -69,15 +69,19 @@ export class RTree implements SpatialIndex {
     this.root = null;
   }
 
-  private _chooseSubtree(bounds: BoundingBox, node: RTreeNode, path: RTreeNode[]): RTreeNode {
+  private _chooseSubtree(
+    bounds: BoundingBox,
+    node: RTreeNode<SpatialHit>,
+    path: RTreeNode<SpatialHit>[]
+  ): RTreeNode<SpatialHit> {
     path.push(node);
 
     if (node.leaf) return node;
 
     let minEnlargement = Infinity;
-    let targetNode = node.children[0] as RTreeNode;
+    let targetNode = node.children[0] as RTreeNode<SpatialHit>;
 
-    for (const child of node.children as RTreeNode[]) {
+    for (const child of node.children as RTreeNode<SpatialHit>[]) {
       const enlargement = this._enlargement(bounds, child.bounds);
       if (enlargement < minEnlargement) {
         minEnlargement = enlargement;
@@ -88,17 +92,17 @@ export class RTree implements SpatialIndex {
     return this._chooseSubtree(bounds, targetNode, path);
   }
 
-  private _search(bounds: BoundingBox, node: RTreeNode, result: any[]): void {
+  private _search(bounds: BoundingBox, node: RTreeNode<SpatialHit>, result: SpatialHit[]): void {
     if (!this._intersects(bounds, node.bounds)) return;
 
     if (node.leaf) {
-      for (const item of node.children as RTreeItem[]) {
+      for (const item of node.children as RTreeItem<SpatialHit>[]) {
         if (this._intersects(bounds, item.bounds)) {
           result.push(item.data);
         }
       }
     } else {
-      for (const child of node.children as RTreeNode[]) {
+      for (const child of node.children as RTreeNode<SpatialHit>[]) {
         this._search(bounds, child, result);
       }
     }
@@ -126,27 +130,28 @@ export class RTree implements SpatialIndex {
     return (bounds.x2 - bounds.x1) * (bounds.y2 - bounds.y1);
   }
 
-  private _adjustBounds(node: RTreeNode): void {
+  private _adjustBounds(node: RTreeNode<SpatialHit>): void {
     if (node.children.length === 0) return;
 
     const first = node.children[0];
-    let bounds = 'bounds' in first ? first.bounds : (first as RTreeItem).bounds;
+    let bounds = 'bounds' in first ? first.bounds : (first as RTreeItem<SpatialHit>).bounds;
 
     for (let i = 1; i < node.children.length; i++) {
       const child = node.children[i];
-      const childBounds = 'bounds' in child ? child.bounds : (child as RTreeItem).bounds;
+      const childBounds =
+        'bounds' in child ? child.bounds : (child as RTreeItem<SpatialHit>).bounds;
       bounds = this._extend(bounds, childBounds);
     }
 
     node.bounds = bounds;
   }
 
-  private _split(insertPath: RTreeNode[], node: RTreeNode): void {
+  private _split(insertPath: RTreeNode<SpatialHit>[], node: RTreeNode<SpatialHit>): void {
     const newNode = {
       children: [],
       bounds: { x1: 0, y1: 0, x2: 0, y2: 0 },
       leaf: node.leaf,
-    };
+    } satisfies RTreeNode<SpatialHit>;
 
     this._chooseSplitAxis(node, newNode);
 
@@ -165,12 +170,12 @@ export class RTree implements SpatialIndex {
     }
   }
 
-  private _chooseSplitAxis(node: RTreeNode, newNode: RTreeNode): void {
+  private _chooseSplitAxis(node: RTreeNode<SpatialHit>, newNode: RTreeNode<SpatialHit>): void {
     const mid = Math.ceil(node.children.length / 2);
     newNode.children = node.children.splice(mid);
   }
 
-  private _condenseTree(path: RTreeNode[]): void {
+  private _condenseTree(path: RTreeNode<SpatialHit>[]): void {
     for (let i = path.length - 1; i >= 0; i--) {
       const node = path[i];
       if (node.children.length < this.minEntries && i > 0) {
@@ -183,21 +188,21 @@ export class RTree implements SpatialIndex {
 
   private _findItem(
     bounds: BoundingBox,
-    data: any,
-    node: RTreeNode,
-    path: RTreeNode[]
-  ): RTreeItem | null {
+    data: SpatialHit,
+    node: RTreeNode<SpatialHit>,
+    path: RTreeNode<SpatialHit>[]
+  ): RTreeItem<SpatialHit> | null {
     path.push(node);
 
     if (node.leaf) {
       return (
-        (node.children as RTreeItem[]).find(
+        (node.children as RTreeItem<SpatialHit>[]).find(
           (item) => item.data === data && this._boundsEqual(item.bounds, bounds)
         ) || null
       );
     }
 
-    for (const child of node.children as RTreeNode[]) {
+    for (const child of node.children as RTreeNode<SpatialHit>[]) {
       if (this._intersects(bounds, child.bounds)) {
         const result = this._findItem(bounds, data, child, path);
         if (result) return result;
@@ -213,19 +218,27 @@ export class RTree implements SpatialIndex {
   }
 }
 
-interface RTreeNode {
-  children: (RTreeNode | RTreeItem)[];
+interface RTreeNode<TData> {
+  children: (RTreeNode<TData> | RTreeItem<TData>)[];
   bounds: BoundingBox;
   leaf: boolean;
 }
 
-interface RTreeItem {
+interface RTreeItem<TData> {
   bounds: BoundingBox;
-  data: any;
+  data: TData;
+}
+
+interface PerformanceMemoryInfo {
+  usedJSHeapSize: number;
+}
+
+interface PerformanceWithMemory extends Performance {
+  memory?: PerformanceMemoryInfo;
 }
 
 export class MemoryManager {
-  private cache = new Map<string, { data: any; lastAccess: number; size: number }>();
+  private cache = new Map<string, { data: unknown; lastAccess: number; size: number }>();
   private maxCacheSize: number;
   private currentCacheSize = 0;
 
@@ -234,7 +247,7 @@ export class MemoryManager {
     this.startMemoryMonitoring();
   }
 
-  set(key: string, data: any): void {
+  set(key: string, data: unknown): void {
     const size = this.estimateSize(data);
 
     if (this.cache.has(key)) {
@@ -252,7 +265,7 @@ export class MemoryManager {
     this.evictIfNeeded();
   }
 
-  get(key: string): any | null {
+  get(key: string): unknown | null {
     const item = this.cache.get(key);
     if (item) {
       item.lastAccess = Date.now();
@@ -279,7 +292,7 @@ export class MemoryManager {
   }
 
   getMemoryUsage(): MemoryMetrics {
-    const memoryInfo = (performance as any).memory;
+    const memoryInfo = (performance as PerformanceWithMemory).memory;
 
     return {
       pages: this.calculatePageMemory(),
@@ -314,7 +327,7 @@ export class MemoryManager {
     return lruKey;
   }
 
-  private estimateSize(data: any): number {
+  private estimateSize(data: unknown): number {
     if (data === null || data === undefined) return 0;
     if (typeof data === 'string') return data.length * 2;
     if (typeof data === 'number') return 8;
@@ -326,8 +339,9 @@ export class MemoryManager {
       return data.reduce((sum, item) => sum + this.estimateSize(item), 0);
     }
     if (typeof data === 'object') {
+      const record = data as Record<string, unknown>;
       return Object.keys(data).reduce(
-        (sum, key) => sum + this.estimateSize(key) + this.estimateSize(data[key]),
+        (sum, key) => sum + this.estimateSize(key) + this.estimateSize(record[key]),
         0
       );
     }
@@ -459,7 +473,7 @@ export class WorkerTaskManager {
     }
   }
 
-  executeTask(task: HeavyTask): Promise<any> {
+  executeTask(task: HeavyTask): Promise<unknown> {
     return new Promise((resolve, reject) => {
       const availableWorker = this.workers.find((worker) => !worker.onmessage);
 
@@ -548,8 +562,8 @@ export class PerformanceOptimizer {
     return { ...this.performanceMetrics };
   }
 
-  updateMetric(metric: keyof PerformanceMetrics, value: any): void {
-    (this.performanceMetrics as any)[metric] = value;
+  updateMetric<K extends keyof PerformanceMetrics>(metric: K, value: PerformanceMetrics[K]): void {
+    this.performanceMetrics[metric] = value;
   }
 
   private startPerformanceMonitoring(): void {
