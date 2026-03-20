@@ -1,3 +1,4 @@
+/* eslint-disable no-console */
 import * as pdfjsLib from 'pdfjs-dist';
 
 export async function setupWorker(
@@ -40,7 +41,9 @@ export async function setupWorker(
           if (debug) console.log('[Worker] Found at:', path);
           return path;
         }
-      } catch {}
+      } catch {
+        /* empty */
+      }
     }
   }
 

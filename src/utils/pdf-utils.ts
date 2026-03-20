@@ -1,3 +1,5 @@
+import type { PDFSource } from '../types';
+
 export const b64toBlob = (
   b64Data: string,
   contentType = 'application/pdf',
@@ -49,7 +51,7 @@ export const blobToArrayBuffer = (blob: Blob): Promise<ArrayBuffer> => {
 
 export type PDFSourceType = 'url' | 'base64' | 'blob' | 'arrayBuffer';
 
-export const detectPDFSourceType = (source: any): PDFSourceType => {
+export const detectPDFSourceType = (source: PDFSource): PDFSourceType => {
   if (typeof source === 'string') {
     if (source.startsWith('http') || source.startsWith('/') || source.startsWith('./')) {
       return 'url';
@@ -65,9 +67,7 @@ export const detectPDFSourceType = (source: any): PDFSourceType => {
   }
 };
 
-export const normalizePDFSource = async (
-  source: string | ArrayBuffer | Blob
-): Promise<ArrayBuffer> => {
+export const normalizePDFSource = async (source: PDFSource): Promise<ArrayBuffer> => {
   const sourceType = detectPDFSourceType(source);
 
   switch (sourceType) {
@@ -102,7 +102,7 @@ export const validateBase64PDF = (base64String: string): boolean => {
     const decoded = atob(cleanBase64);
 
     return decoded.startsWith('%PDF');
-  } catch (error) {
+  } catch {
     return false;
   }
 };
@@ -119,7 +119,7 @@ export const extractPDFMetadata = (base64String: string): { size: number; versio
       size: decoded.length,
       version,
     };
-  } catch (error) {
+  } catch {
     throw new Error('Failed to extract PDF metadata from base64 string');
   }
 };

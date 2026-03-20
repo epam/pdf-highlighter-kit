@@ -1,5 +1,6 @@
 import { PDFHighlightViewer as IPDFHighlightViewer } from './api';
 import {
+  PDFSource,
   ViewerOptions,
   LoadPDFOptions,
   BBoxOrigin,
@@ -485,7 +486,7 @@ export class PDFHighlightViewer implements IPDFHighlightViewer {
   // PDF Management
   // =============================================================================
 
-  async loadPDF(source: string | ArrayBuffer | Blob, options?: LoadPDFOptions): Promise<void> {
+  async loadPDF(source: PDFSource, options?: LoadPDFOptions): Promise<void> {
     if (!this.isInitialized) {
       throw new Error('Viewer must be initialized before loading PDF');
     }
@@ -621,7 +622,7 @@ export class PDFHighlightViewer implements IPDFHighlightViewer {
         if (pageContainer && !pageContainer.classList.contains('rendered')) {
           batch.push(
             this.renderPage(pageNumber).catch((error) => {
-              console.debug(`Failed to render page ${pageNumber}:`, error);
+              console.error(`Failed to render page ${pageNumber}:`, error);
             })
           );
         }
@@ -640,11 +641,8 @@ export class PDFHighlightViewer implements IPDFHighlightViewer {
 
     // Check if already rendered
     if (pageContainer.classList.contains('rendered')) {
-      console.log(`Page ${pageNumber}: skipping, already has 'rendered' class`);
       return;
     }
-
-    console.log(`Page ${pageNumber}: rendering at scale ${this.currentScale}`);
 
     try {
       // Add loading state
@@ -1028,8 +1026,6 @@ export class PDFHighlightViewer implements IPDFHighlightViewer {
 
     const pageToKeep = this.currentPage;
 
-    console.log('Zoom changed to:', this.currentScale);
-
     // Clear ALL cached data for the new scale
     this.pdfEngine.clearAllPageCache();
     this.pageDimensions.clear(); // Clear dimension cache
@@ -1075,8 +1071,6 @@ export class PDFHighlightViewer implements IPDFHighlightViewer {
       containerHeight
     );
 
-    console.log('Re-rendering visible pages at new scale:', visiblePagesAfterRestore);
-
     // Render visible pages immediately
     for (const pageNumber of visiblePagesAfterRestore) {
       try {
@@ -1113,9 +1107,8 @@ export class PDFHighlightViewer implements IPDFHighlightViewer {
       this.interactionHandler.clearSelection();
     },
 
-    selectText: (range: TextRange): void => {
+    selectText: (_range: TextRange): void => {
       // TODO: Implement programmatic text selection
-      console.log('selectText not yet implemented:', range);
     },
 
     copySelection: (format: 'plain' | 'formatted' | 'citation' = 'plain'): void => {
@@ -1357,12 +1350,10 @@ export class PDFHighlightViewer implements IPDFHighlightViewer {
 
   enableProfiling(): void {
     // TODO: Enable detailed performance profiling
-    console.log('Profiling enabled');
   }
 
   disableProfiling(): void {
     // TODO: Disable detailed performance profiling
-    console.log('Profiling disabled');
   }
 
   // =============================================================================
@@ -2211,11 +2202,6 @@ export class PDFHighlightViewer implements IPDFHighlightViewer {
       });
 
       pageContainer.appendChild(textLayer);
-
-      console.log(
-        `Text layer added to page ${pageNumber} with ${textContent.items.length} text items`
-      );
-      console.log('Text span style applied:', textLayer.children[0]?.getAttribute('style'));
     } catch (error) {
       console.error(`Failed to add text layer to page ${pageNumber}:`, error);
     }
@@ -2237,8 +2223,8 @@ export class PDFHighlightViewer implements IPDFHighlightViewer {
     const existingHighlights = highlightLayer.children;
     let overlappingCount = 0;
 
-    for (let i = 0; i < existingHighlights.length; i++) {
-      const existing = existingHighlights[i] as HTMLElement;
+    for (const existingHighlight of existingHighlights) {
+      const existing = existingHighlight as HTMLElement;
       const existingLeft = parseFloat(existing.style.left);
       const existingTop = parseFloat(existing.style.top);
       const existingWidth = parseFloat(existing.style.width);

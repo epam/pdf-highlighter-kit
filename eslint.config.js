@@ -21,7 +21,7 @@ export default tseslint.config(
     rules: {
       'no-multi-spaces': 'error',
       'no-empty': 'warn',
-      'no-console': 'warn',
+      'no-console': ['warn', { allow: ['warn', 'error'] }],
       'no-constant-condition': 'off',
       'no-multiple-empty-lines': ['warn', { max: 1, maxBOF: 0 }],
     },

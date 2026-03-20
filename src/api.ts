@@ -1,4 +1,5 @@
 import {
+  PDFSource,
   ViewerOptions,
   LoadPDFOptions,
   TextRange,
@@ -17,7 +18,7 @@ import {
 export interface PDFHighlightViewer {
   init(container: HTMLElement, options?: ViewerOptions): Promise<void>;
 
-  loadPDF(source: string | ArrayBuffer | Blob, options?: LoadPDFOptions): Promise<void>;
+  loadPDF(source: PDFSource, options?: LoadPDFOptions): Promise<void>;
 
   preloadPages(pageNumbers: number[]): Promise<void>;
 
@@ -93,11 +94,11 @@ export interface PDFHighlightViewer {
 
   accessibility: AccessibilityFeatures;
 
-  addEventListener(event: string, callback: (...args: any[]) => void): void;
+  addEventListener(event: string, callback: (...args: unknown[]) => void): void;
 
-  removeEventListener(event: string, callback: (...args: any[]) => void): void;
+  removeEventListener(event: string, callback: (...args: unknown[]) => void): void;
 
-  emit(event: string, data?: any): void;
+  emit(event: string, data?: unknown): void;
 
   exportAsImage(format?: 'png' | 'jpeg', quality?: number): Promise<Blob>;
 

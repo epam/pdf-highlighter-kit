@@ -1,17 +1,17 @@
-import { ViewportManager as IViewportManager, Priority, Viewport, BoundingBox } from '../types';
+import { BoundingBox, ViewportManager as IViewportManager, Priority } from '../types';
 
 export class ViewportManager implements IViewportManager {
-  private containerHeight: number = 0;
-  private pageHeight: number = 800; // Default page height
-  private pageGap: number = 20; // Gap between pages
+  private containerHeight = 0;
+  private pageHeight = 800; // Default page height
+  private pageGap = 20; // Gap between pages
   private bufferSize: number;
   private maxCachedPages: number;
-  private totalPages: number = 0;
+  private totalPages = 0;
   private selectedPages: number[] | null = null; // When set, only these physical page numbers participate in layout/visibility. null = all pages.
 
   constructor(
-    bufferSize: number = 2, // Restored to 2 to prevent white boxes
-    maxCachedPages: number = 8 // Increased to 8 for better user experience
+    bufferSize = 2, // Restored to 2 to prevent white boxes
+    maxCachedPages = 8 // Increased to 8 for better user experience
   ) {
     this.bufferSize = bufferSize;
     this.maxCachedPages = maxCachedPages;
@@ -20,7 +20,7 @@ export class ViewportManager implements IViewportManager {
   /**
    * Update container dimensions
    */
-  updateDimensions(containerHeight: number, pageHeight: number = 800): void {
+  updateDimensions(containerHeight: number, pageHeight = 800): void {
     this.containerHeight = containerHeight;
     this.pageHeight = pageHeight;
   }
@@ -96,7 +96,7 @@ export class ViewportManager implements IViewportManager {
   /**
    * Queue pages for rendering with appropriate priority
    */
-  queuePagesForRendering(pages: number[], priority: Priority): void {
+  queuePagesForRendering(_pages: number[], _priority: Priority): void {
     // This will be called by the consumer (PDFEngine)
     // Implementation is handled by the engine that uses this manager
   }
@@ -104,7 +104,7 @@ export class ViewportManager implements IViewportManager {
   /**
    * Determine which pages to unload based on distance from current view
    */
-  unloadDistantPages(currentPage: number, threshold: number = 5): void {
+  unloadDistantPages(_currentPage: number, _threshold = 5): void {
     // This will be called by the consumer (PDFEngine)
     // Implementation is handled by the engine that uses this manager
   }
@@ -252,7 +252,7 @@ export class ViewportManager implements IViewportManager {
   /**
    * Calculate viewport bounds for spatial indexing
    */
-  getViewportBounds(scrollTop: number, containerHeight: number, scale: number = 1): BoundingBox {
+  getViewportBounds(scrollTop: number, containerHeight: number, scale = 1): BoundingBox {
     return {
       x1: 0,
       y1: scrollTop / scale,

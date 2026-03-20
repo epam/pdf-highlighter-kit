@@ -1,5 +1,6 @@
 import * as pdfjsLib from 'pdfjs-dist';
 import {
+  PDFSource,
   TextContent,
   Page,
   ViewerOptions,
@@ -17,7 +18,6 @@ import {
 if (!pdfjsLib.GlobalWorkerOptions.workerSrc) {
   pdfjsLib.GlobalWorkerOptions.workerSrc =
     'https://unpkg.com/pdfjs-dist@5.4.149/build/pdf.worker.min.mjs';
-  console.log('PDF.js worker configured to CDN:', pdfjsLib.GlobalWorkerOptions.workerSrc);
 }
 
 export class PDFEngine {
@@ -50,7 +50,7 @@ export class PDFEngine {
     this.pageRenderCallback = callback;
   }
 
-  async loadDocument(source: string | ArrayBuffer | Blob): Promise<void> {
+  async loadDocument(source: PDFSource): Promise<void> {
     try {
       this.thumbnailCache.clear();
       const sourceType = detectPDFSourceType(source);
@@ -62,11 +62,9 @@ export class PDFEngine {
         }
 
         try {
-          const metadata = extractPDFMetadata(base64String);
-          console.log(
-            `Loading PDF from base64: ${Math.round(metadata.size / 1024)}KB, version: ${metadata.version || 'unknown'}`
-          );
+          extractPDFMetadata(base64String);
         } catch (metaError) {
+          // eslint-disable-next-line no-console
           console.warn('Could not extract PDF metadata:', metaError);
         }
       }
@@ -89,10 +87,6 @@ export class PDFEngine {
           loading: false,
         });
       }
-
-      console.log(
-        `PDF loaded successfully: ${this.pdfDocument.numPages} pages, fingerprint: ${this.pdfDocument.fingerprints?.[0] || 'unknown'}`
-      );
     } catch (error) {
       console.error('Failed to load PDF document:', error);
 
@@ -149,24 +143,16 @@ export class PDFEngine {
     scale = 1.5,
     canvas?: HTMLCanvasElement
   ): Promise<HTMLCanvasElement> {
-    console.log(`PDF Engine: renderPage ${pageNumber} at scale ${scale}`);
-
     const pageData = this.pages.get(pageNumber);
     if (!pageData) {
       throw new Error(`Page ${pageNumber} not found`);
     }
 
     if (pageData.rendered && pageData.canvas && pageData.scale === scale) {
-      console.log(
-        `PDF Engine: Page ${pageNumber} already rendered at scale ${scale}, returning cached`
-      );
       return pageData.canvas;
     }
 
     if (pageData.rendered && pageData.scale !== scale) {
-      console.log(
-        `PDF Engine: Page ${pageNumber} scale changed from ${pageData.scale} to ${scale}, re-rendering`
-      );
       pageData.rendered = false;
       pageData.canvas = undefined;
     }
@@ -408,7 +394,6 @@ export class PDFEngine {
   }
 
   clearAllPageCache(): void {
-    console.log('PDF Engine: Clearing all cached page renders');
     this.pages.forEach((page, pageNumber) => {
       if (page.canvas) {
         this.returnCanvasToPool(page.canvas);
