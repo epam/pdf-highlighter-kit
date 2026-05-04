@@ -2,14 +2,37 @@ import {
   BBoxOrigin,
   HighlightStyle,
   InputHighlightData,
+  PageRotationDegrees,
   PDFHighlightViewer,
+  RotationDirection,
   ZoomMode,
 } from '../../../src';
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, {
+  type CSSProperties,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import { ButtonVariant, DialButton, DialDropdown } from '@epam/ai-dial-ui-kit';
 import '@epam/ai-dial-ui-kit/styles.css';
 
 const PDF_URL = 'https://ontheline.trincoll.edu/images/bookdown/sample-local-pdf.pdf';
+
+const toolbarSelectStyle: CSSProperties = {
+  background: 'rgba(255,255,255,0.08)',
+  color: '#ffffff',
+  border: '1px solid rgba(255,255,255,0.25)',
+  borderRadius: 6,
+  padding: '4px 8px',
+  height: 30,
+};
+
+const toolbarSelectOptionStyle: CSSProperties = {
+  background: '#23252a',
+  color: '#ffffff',
+};
 
 const ICON_ALERT_CIRCLE_SVG =
   '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 8v4"/><path d="M12 16h.01"/><circle cx="12" cy="12" r="10"/></svg>';
@@ -149,6 +172,12 @@ export const SimpleExample: React.FC = () => {
   const [performanceMode, setPerformanceMode] = useState(false);
   const [bboxOrigin, setBBoxOrigin] = useState<BBoxOrigin>('top-left');
 
+  const [displayRotationPage, setDisplayRotationPage] = useState(1);
+  const [displayRotationDegrees, setDisplayRotationDegrees] = useState<PageRotationDegrees>(0);
+  const [displayRotationDirection, setDisplayRotationDirection] = useState(
+    RotationDirection.Clockwise
+  );
+
   // Debug state (from events)
   const [totalPages, setTotalPages] = useState<number | null>(null);
   const [currentPage, setCurrentPage] = useState<number>(1);
@@ -180,6 +209,11 @@ export const SimpleExample: React.FC = () => {
     setEvents([]);
     pushEvent('ui.clearEvents', {});
   }, [pushEvent]);
+
+  useEffect(() => {
+    if (totalPages == null || totalPages < 1) return;
+    setDisplayRotationPage((p) => Math.min(Math.max(1, p), totalPages));
+  }, [totalPages]);
 
   const reinitViewer = useCallback(() => {
     setRenderedPages(new Set());
@@ -362,6 +396,42 @@ export const SimpleExample: React.FC = () => {
     [highlights, pushEvent]
   );
 
+  const onDisplayRotationPageChange = useCallback(
+    (page: number) => {
+      setDisplayRotationPage(page);
+      viewerRef.current?.setPageDisplayRotation(
+        page,
+        displayRotationDegrees,
+        displayRotationDirection
+      );
+    },
+    [displayRotationDegrees, displayRotationDirection]
+  );
+
+  const onDisplayRotationDegreesChange = useCallback(
+    (degrees: PageRotationDegrees) => {
+      setDisplayRotationDegrees(degrees);
+      viewerRef.current?.setPageDisplayRotation(
+        displayRotationPage,
+        degrees,
+        displayRotationDirection
+      );
+    },
+    [displayRotationPage, displayRotationDirection]
+  );
+
+  const onDisplayRotationDirectionChange = useCallback(
+    (direction: RotationDirection) => {
+      setDisplayRotationDirection(direction);
+      viewerRef.current?.setPageDisplayRotation(
+        displayRotationPage,
+        displayRotationDegrees,
+        direction
+      );
+    },
+    [displayRotationPage, displayRotationDegrees]
+  );
+
   useEffect(() => {
     if (!containerRef.current) return;
 
@@ -426,6 +496,7 @@ export const SimpleExample: React.FC = () => {
           { event: 'highlightBlur', cb: on('highlightBlur') },
 
           { event: 'pageChanged', cb: on('pageChanged') },
+          { event: 'pageRotationChanged', cb: on('pageRotationChanged') },
           { event: 'zoomChanged', cb: on('zoomChanged') },
 
           { event: 'navigationComplete', cb: on('navigationComplete') },
@@ -762,26 +833,68 @@ export const SimpleExample: React.FC = () => {
             <select
               value={bboxOrigin}
               onChange={(e) => onBBoxOriginChange(e.target.value as BBoxOrigin)}
-              style={{
-                background: 'rgba(255,255,255,0.08)',
-                color: '#ffffff',
-                border: '1px solid rgba(255,255,255,0.25)',
-                borderRadius: 6,
-                padding: '4px 8px',
-                height: 30,
-              }}
+              style={toolbarSelectStyle}
             >
-              <option value="bottom-right" style={{ background: '#23252a', color: '#ffffff' }}>
+              <option value="bottom-right" style={toolbarSelectOptionStyle}>
                 bottom-right
               </option>
-              <option value="bottom-left" style={{ background: '#23252a', color: '#ffffff' }}>
+              <option value="bottom-left" style={toolbarSelectOptionStyle}>
                 bottom-left
               </option>
-              <option value="top-right" style={{ background: '#23252a', color: '#ffffff' }}>
+              <option value="top-right" style={toolbarSelectOptionStyle}>
                 top-right
               </option>
-              <option value="top-left" style={{ background: '#23252a', color: '#ffffff' }}>
+              <option value="top-left" style={toolbarSelectOptionStyle}>
                 top-left
+              </option>
+            </select>
+          </label>
+
+          <label style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+            page rotation
+            <select
+              value={displayRotationPage}
+              onChange={(e) => onDisplayRotationPageChange(Number(e.target.value))}
+              style={toolbarSelectStyle}
+            >
+              {Array.from({ length: Math.max(totalPages ?? 5, 1) }, (_, i) => i + 1).map((p) => (
+                <option key={p} value={p} style={toolbarSelectOptionStyle}>
+                  {p}
+                </option>
+              ))}
+            </select>
+            <select
+              value={displayRotationDegrees}
+              onChange={(e) =>
+                onDisplayRotationDegreesChange(Number(e.target.value) as PageRotationDegrees)
+              }
+              style={toolbarSelectStyle}
+            >
+              <option value={0} style={toolbarSelectOptionStyle}>
+                0°
+              </option>
+              <option value={90} style={toolbarSelectOptionStyle}>
+                90°
+              </option>
+              <option value={180} style={toolbarSelectOptionStyle}>
+                180°
+              </option>
+              <option value={270} style={toolbarSelectOptionStyle}>
+                270°
+              </option>
+            </select>
+            <select
+              value={displayRotationDirection}
+              onChange={(e) =>
+                onDisplayRotationDirectionChange(e.target.value as RotationDirection)
+              }
+              style={toolbarSelectStyle}
+            >
+              <option value={RotationDirection.Clockwise} style={toolbarSelectOptionStyle}>
+                CW
+              </option>
+              <option value={RotationDirection.CounterClockwise} style={toolbarSelectOptionStyle}>
+                CCW
               </option>
             </select>
           </label>
@@ -805,7 +918,8 @@ export const SimpleExample: React.FC = () => {
         </div>
 
         <div style={{ fontSize: 12, opacity: 0.75, marginTop: 4 }}>
-          Note: bbox origin applies immediately; other options require <b>Reinit</b>.
+          Note: bbox origin and page rotation apply immediately. After <b>Reinit</b>, set page
+          rotation again if needed. Other options require <b>Reinit</b>.
         </div>
       </div>
 

@@ -20,10 +20,12 @@ import {
   ZoomValue,
   ZoomMode,
   ThumbnailOptions,
+  PageRotationDegrees,
+  RotationDirection,
 } from './types';
 import { PDFEngine } from './core/pdf-engine';
 import { ViewportManager } from './core/viewport-manager';
-import { UnifiedLayerBuilder } from './core/unified-layer-builder';
+import { UnifiedLayerBuilder, TextLayerViewport } from './core/unified-layer-builder';
 import { UnifiedInteractionHandler, InteractionCallbacks } from './core/interaction-handler';
 import { PerformanceOptimizer } from './core/performance-optimizer';
 import { buildHighlightsIndex } from './utils/highlight-adapter';
@@ -40,6 +42,12 @@ import {
   applyLabelStyle,
   scaleLabelStyle,
 } from './utils/label-style';
+import {
+  clockwiseToCcw,
+  displayRotationToClockwise,
+  rotateBoundingBoxForCcwRotation,
+} from './utils/rotate-bbox';
+import { sumPdfIntrinsicAndUserRotation } from './utils/pdf-rotation-math';
 
 const CONTAINER_PADDING = 40;
 const ZOOM_STEP = 1.2;
@@ -76,6 +84,10 @@ export class PDFHighlightViewer implements IPDFHighlightViewer {
   private navIndex = -1;
 
   private pageDimensions = new Map<number, { width: number; height: number }>();
+  /** Intrinsic page size in normalized units (PDF default viewport at currentScale / scale). */
+  private intrinsicPageNormalized = new Map<number, { width: number; height: number }>();
+  /** Extra clockwise rotation per page on top of PDF `/Rotate`. */
+  private pageDisplayRotations = new Map<number, PageRotationDegrees>();
   private defaultPageHeight = 800;
 
   private eventListeners: { event: string; callback: EventCallback }[] = [];
@@ -154,8 +166,22 @@ export class PDFHighlightViewer implements IPDFHighlightViewer {
       this.setupAccessibility();
     }
 
+    this.syncPageDisplayRotationsFromOptions();
+
     this.isInitialized = true;
     this.emit('initialized');
+  }
+
+  private syncPageDisplayRotationsFromOptions(): void {
+    this.pageDisplayRotations.clear();
+    const raw = this.options.pageDisplayRotations;
+    if (!raw) return;
+    for (const [key, value] of Object.entries(raw)) {
+      const n = Number(key);
+      if (Number.isInteger(n) && n >= 1) {
+        this.pageDisplayRotations.set(n, value);
+      }
+    }
   }
 
   /**
@@ -404,24 +430,49 @@ export class PDFHighlightViewer implements IPDFHighlightViewer {
     }
   }
 
+  private getUserClockwiseRotation(pageNumber: number): PageRotationDegrees {
+    return this.pageDisplayRotations.get(pageNumber) ?? 0;
+  }
+
+  private effectiveViewportRotationDegrees(
+    intrinsicRotateDegrees: number,
+    pageNumber: number
+  ): number {
+    return sumPdfIntrinsicAndUserRotation(
+      intrinsicRotateDegrees,
+      this.getUserClockwiseRotation(pageNumber)
+    );
+  }
+
   /**
-   * Get and cache real page dimensions
+   * Get and cache display page dimensions (rotated viewport pixels at currentScale)
+   * and intrinsic normalized size for highlight mapping.
    */
   private async getPageDimensions(pageNumber: number): Promise<{ width: number; height: number }> {
-    // Return cached dimensions if available
-    const cached = this.pageDimensions.get(pageNumber);
-    if (cached) return cached;
+    const cachedDisplay = this.pageDimensions.get(pageNumber);
+    const cachedIntrinsic = this.intrinsicPageNormalized.get(pageNumber);
+    if (cachedDisplay && cachedIntrinsic) {
+      return cachedDisplay;
+    }
 
-    // Get PDF page and its viewport at current scale
-    const page = await this.pdfEngine.getPage(pageNumber);
-    const viewport = page.getViewport({ scale: this.currentScale });
+    const pdfPage = await this.pdfEngine.getPage(pageNumber);
+    const intrinsicVp = pdfPage.getViewport({ scale: this.currentScale });
+    const scale = this.currentScale > 0 ? this.currentScale : 1;
+    this.intrinsicPageNormalized.set(pageNumber, {
+      width: intrinsicVp.width / scale,
+      height: intrinsicVp.height / scale,
+    });
+
+    const effectiveRotation = this.effectiveViewportRotationDegrees(pdfPage.rotate, pageNumber);
+    const displayVp = pdfPage.getViewport({
+      scale: this.currentScale,
+      rotation: effectiveRotation,
+    });
 
     const dimensions = {
-      width: viewport.width,
-      height: viewport.height,
+      width: displayVp.width,
+      height: displayVp.height,
     };
-
-    // Cache the dimensions
     this.pageDimensions.set(pageNumber, dimensions);
     return dimensions;
   }
@@ -496,6 +547,8 @@ export class PDFHighlightViewer implements IPDFHighlightViewer {
 
       const docInfo = this.pdfEngine.getDocumentInfo();
       this.documentNumPages = docInfo.numPages;
+
+      this.syncPageDisplayRotationsFromOptions();
 
       const rawSelected = options?.selectedPages ?? this.options.selectedPages;
       const selectedPages = this.normalizeSelectedPages(rawSelected, this.documentNumPages);
@@ -648,8 +701,16 @@ export class PDFHighlightViewer implements IPDFHighlightViewer {
       // Add loading state
       pageContainer.classList.add('loading');
 
+      const pdfPage = await this.pdfEngine.getPage(pageNumber);
+      const effectiveRotation = this.effectiveViewportRotationDegrees(pdfPage.rotate, pageNumber);
+
       // Render PDF canvas
-      const canvas = await this.pdfEngine.renderPage(pageNumber, this.currentScale);
+      const canvas = await this.pdfEngine.renderPage(
+        pageNumber,
+        this.currentScale,
+        undefined,
+        effectiveRotation
+      );
 
       // Clear container and add canvas
       pageContainer.innerHTML = '';
@@ -733,8 +794,10 @@ export class PDFHighlightViewer implements IPDFHighlightViewer {
     if (!this.container) {
       return { scaleX: 1, scaleY: 1 };
     }
-    const page = await this.pdfEngine.getPage(this.currentPage || 1);
-    const viewport = page.getViewport({ scale: 1 });
+    const pageNum = this.currentPage || 1;
+    const page = await this.pdfEngine.getPage(pageNum);
+    const effectiveRotation = this.effectiveViewportRotationDegrees(page.rotate, pageNum);
+    const viewport = page.getViewport({ scale: 1, rotation: effectiveRotation });
     const scaleX = (this.container.clientWidth - CONTAINER_PADDING) / viewport.width;
     const scaleY = (this.container.clientHeight - CONTAINER_PADDING) / viewport.height;
     return { scaleX, scaleY };
@@ -760,11 +823,46 @@ export class PDFHighlightViewer implements IPDFHighlightViewer {
     return this.totalPages;
   }
 
+  setPageDisplayRotation(
+    pageNumber: number,
+    degrees: PageRotationDegrees,
+    direction: RotationDirection = RotationDirection.Clockwise
+  ): void {
+    if (degrees === 0) {
+      this.pageDisplayRotations.delete(pageNumber);
+      if (this.options.pageDisplayRotations) {
+        const next = { ...this.options.pageDisplayRotations };
+        delete next[pageNumber];
+        this.options.pageDisplayRotations = Object.keys(next).length > 0 ? next : undefined;
+      }
+    } else {
+      const cw = displayRotationToClockwise(degrees, direction);
+      this.pageDisplayRotations.set(pageNumber, cw);
+      this.options.pageDisplayRotations = {
+        ...(this.options.pageDisplayRotations ?? {}),
+        [pageNumber]: cw,
+      };
+    }
+
+    void this.reRenderVisiblePages();
+    this.emit('pageRotationChanged', { pageNumber, degrees, direction });
+  }
+
+  getPageDisplayRotation(pageNumber: number): PageRotationDegrees {
+    return this.pageDisplayRotations.get(pageNumber) ?? 0;
+  }
+
   async getThumbnails(
     pageNumbers: number[],
     options?: ThumbnailOptions
   ): Promise<Map<number, HTMLCanvasElement>> {
-    return this.pdfEngine.getThumbnails(pageNumbers, options);
+    const viewportRotations: Record<number, number> = { ...(options?.viewportRotations ?? {}) };
+    for (const n of pageNumbers) {
+      if (viewportRotations[n] !== undefined) continue;
+      const pdfPage = await this.pdfEngine.getPage(n);
+      viewportRotations[n] = this.effectiveViewportRotationDegrees(pdfPage.rotate, n);
+    }
+    return this.pdfEngine.getThumbnails(pageNumbers, { ...options, viewportRotations });
   }
 
   async getThumbnailsDataUrl(
@@ -880,7 +978,7 @@ export class PDFHighlightViewer implements IPDFHighlightViewer {
     // Refresh only affected pages
     for (const pageNumber of affectedPages) {
       this.refreshHighlightLayerForPage(pageNumber);
-      this.updatePageUnifiedLayer(pageNumber);
+      void this.updatePageUnifiedLayer(pageNumber);
       this.buildSpatialIndexForPage(pageNumber);
     }
 
@@ -908,7 +1006,7 @@ export class PDFHighlightViewer implements IPDFHighlightViewer {
 
     for (const pageNumber of affectedPages) {
       this.refreshHighlightLayerForPage(pageNumber);
-      this.updatePageUnifiedLayer(pageNumber);
+      void this.updatePageUnifiedLayer(pageNumber);
       this.buildSpatialIndexForPage(pageNumber);
     }
 
@@ -952,7 +1050,7 @@ export class PDFHighlightViewer implements IPDFHighlightViewer {
 
     for (const pageNumber of affectedPages) {
       this.refreshHighlightLayerForPage(pageNumber);
-      this.updatePageUnifiedLayer(pageNumber);
+      void this.updatePageUnifiedLayer(pageNumber);
       this.buildSpatialIndexForPage(pageNumber);
     }
 
@@ -962,7 +1060,7 @@ export class PDFHighlightViewer implements IPDFHighlightViewer {
   /**
    * Update unified layer for a specific page
    */
-  private updatePageUnifiedLayer(pageNumber: number): void {
+  private async updatePageUnifiedLayer(pageNumber: number): Promise<void> {
     const pageContainer = this.pageContainers.get(pageNumber);
     if (!pageContainer) return;
 
@@ -988,12 +1086,25 @@ export class PDFHighlightViewer implements IPDFHighlightViewer {
       }),
     }));
 
+    let viewport: TextLayerViewport | undefined;
+    try {
+      const pdfPage = await this.pdfEngine.getPage(pageNumber);
+      const effectiveRotation = this.effectiveViewportRotationDegrees(pdfPage.rotate, pageNumber);
+      viewport = pdfPage.getViewport({
+        scale: this.currentScale,
+        rotation: effectiveRotation,
+      });
+    } catch {
+      viewport = undefined;
+    }
+
     this.layerBuilder.updateHighlights(
       pageContainer,
       normalizedHighlights,
       pageNumber,
       pageData.textContent,
-      this.currentScale
+      this.currentScale,
+      viewport
     );
   }
   /**
@@ -1028,7 +1139,8 @@ export class PDFHighlightViewer implements IPDFHighlightViewer {
 
     // Clear ALL cached data for the new scale
     this.pdfEngine.clearAllPageCache();
-    this.pageDimensions.clear(); // Clear dimension cache
+    this.pageDimensions.clear();
+    this.intrinsicPageNormalized.clear();
 
     // Clear all containers and update their sizes for new scale
     let totalHeight = 0;
@@ -1249,15 +1361,14 @@ export class PDFHighlightViewer implements IPDFHighlightViewer {
     if (!this.container) return;
 
     const pageTop = this.getPageScrollTop(pageNumber);
-    const origin = this.options.bboxOrigin ?? 'bottom-right';
-    const pixelDimensions = this.pageDimensions.get(pageNumber);
-    if (!pixelDimensions) {
-      throw new Error(`Page dimensions for page ${pageNumber} are not available`);
-    }
-
-    const dimensions = this.toPageCoordinateDimensions(pixelDimensions);
-    const normalizedY = origin.startsWith('bottom') ? dimensions.height - y : y;
-    const targetY = pageTop + normalizedY * this.currentScale - this.container.clientHeight * 0.3;
+    const normalizedBBox = this.normalizeBBoxForPage(
+      { page: pageNumber, x1: x, y1: y, x2: x, y2: y },
+      pageNumber,
+      this.options.bboxSourceDimensions,
+      this.options.bboxOrigin
+    );
+    const targetY =
+      pageTop + normalizedBBox.y1 * this.currentScale - this.container.clientHeight * 0.3;
 
     this.container.scrollTop = Math.max(0, targetY);
 
@@ -1888,13 +1999,13 @@ export class PDFHighlightViewer implements IPDFHighlightViewer {
   ): BoundingBox {
     const origin: BBoxOrigin = bboxOrigin ?? this.options.bboxOrigin ?? 'bottom-right';
     const computedSourceDimensions = bboxSourceDimensions ?? this.options.bboxSourceDimensions;
-    const pixelDimensions = this.pageDimensions.get(pageNumber);
-    if (!pixelDimensions) {
+    const intrinsic = this.intrinsicPageNormalized.get(pageNumber);
+    if (!intrinsic) {
       throw new Error(`Page dimensions for page ${pageNumber} are not available`);
     }
 
-    const { width: pageWidth, height: pageHeight } =
-      this.toPageCoordinateDimensions(pixelDimensions);
+    const pageWidth = intrinsic.width;
+    const pageHeight = intrinsic.height;
 
     let x1 = bbox.x1;
     let x2 = bbox.x2;
@@ -1924,12 +2035,20 @@ export class PDFHighlightViewer implements IPDFHighlightViewer {
       y2 = pageHeight - y2;
     }
 
-    return {
+    let result: BoundingBox = {
       x1: Math.min(x1, x2),
       y1: Math.min(y1, y2),
       x2: Math.max(x1, x2),
       y2: Math.max(y1, y2),
     };
+
+    const userCw = this.getUserClockwiseRotation(pageNumber);
+    if (userCw !== 0) {
+      const ccw = clockwiseToCcw(userCw);
+      result = rotateBoundingBoxForCcwRotation(result, pageWidth, pageHeight, ccw);
+    }
+
+    return result;
   }
   /**
    * Build spatial indices for displayed pages only
@@ -2087,9 +2206,12 @@ export class PDFHighlightViewer implements IPDFHighlightViewer {
     }
 
     try {
-      // Get the PDF page and its viewport
       const pdfPage = await this.pdfEngine.getPage(pageNumber);
-      const viewport = pdfPage.getViewport({ scale: this.currentScale });
+      const effectiveRotation = this.effectiveViewportRotationDegrees(pdfPage.rotate, pageNumber);
+      const viewport = pdfPage.getViewport({
+        scale: this.currentScale,
+        rotation: effectiveRotation,
+      });
 
       // Extract text content from PDF
       const textContent = await pdfPage.getTextContent();
@@ -2323,6 +2445,9 @@ export class PDFHighlightViewer implements IPDFHighlightViewer {
     // Clear state
     this.eventListeners = [];
     this.isInitialized = false;
+    this.pageDimensions.clear();
+    this.intrinsicPageNormalized.clear();
+    this.pageDisplayRotations.clear();
 
     this.emit('destroyed');
   }

@@ -1,7 +1,7 @@
 import { PDFHighlightViewer } from './PDFHighlightViewer';
 
 export { PDFHighlightViewer } from './PDFHighlightViewer';
-export { ZoomMode } from './types';
+export { RotationDirection, ZoomMode } from './types';
 
 export type { PDFHighlightViewer as IPDFHighlightViewer } from './api';
 
@@ -25,6 +25,8 @@ export type {
   LoadPDFOptions,
   MemoryMetrics,
   Page,
+  PageDisplayRotationClockwise,
+  PageRotationDegrees,
   PageChangeEvent,
   PDFSource,
   PerformanceMetrics,
@@ -60,8 +62,20 @@ export {
 } from './core/performance-optimizer';
 export { TextSegmentation } from './core/text-segmentation';
 export { UnifiedLayerBuilder } from './core/unified-layer-builder';
+export type { TextLayerViewport } from './core/unified-layer-builder';
 export { ViewportManager } from './core/viewport-manager';
 
+export {
+  clockwiseToCcw,
+  displayRotationToClockwise,
+  rotateBoundingBoxForCcwRotation,
+  rotatePointCcw,
+} from './utils/rotate-bbox';
+export {
+  normalizePdfRotationDegrees,
+  PDF_ROTATION_FULL_CIRCLE_DEGREES,
+  sumPdfIntrinsicAndUserRotation,
+} from './utils/pdf-rotation-math';
 export {
   b64toArrayBuffer,
   b64toBlob,
