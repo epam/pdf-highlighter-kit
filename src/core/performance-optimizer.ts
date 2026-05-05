@@ -587,7 +587,6 @@ export class PerformanceOptimizer {
 
       if (currentTime - lastTime >= 1000) {
         this.performanceMetrics.fps = frameCount;
-        console.log('[PerformanceOptimizer] FPS:', frameCount, 'memory:', this.memoryManager.getMemoryUsage());
         frameCount = 0;
         lastTime = currentTime;
       }
