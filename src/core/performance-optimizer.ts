@@ -241,6 +241,7 @@ export class MemoryManager {
   private cache = new Map<string, { data: unknown; lastAccess: number; size: number }>();
   private maxCacheSize: number;
   private currentCacheSize = 0;
+  private monitoringIntervalId: ReturnType<typeof setInterval> | null = null;
 
   constructor(maxCacheSizeMB = 100) {
     this.maxCacheSize = maxCacheSizeMB * 1024 * 1024;
@@ -289,6 +290,14 @@ export class MemoryManager {
   clear(): void {
     this.cache.clear();
     this.currentCacheSize = 0;
+  }
+
+  destroy(): void {
+    if (this.monitoringIntervalId !== null) {
+      clearInterval(this.monitoringIntervalId);
+      this.monitoringIntervalId = null;
+    }
+    this.clear();
   }
 
   getMemoryUsage(): MemoryMetrics {
@@ -369,7 +378,7 @@ export class MemoryManager {
   }
 
   private startMemoryMonitoring(): void {
-    setInterval(() => {
+    this.monitoringIntervalId = setInterval(() => {
       const usage = this.getMemoryUsage();
       if (usage.total && usage.total > 200) {
         console.warn('High memory usage detected:', usage);
@@ -514,6 +523,8 @@ export class PerformanceOptimizer {
   public renderOptimizer: RenderOptimizer;
   public workerManager: WorkerTaskManager | null = null;
 
+  private rafId: number | null = null;
+
   private performanceMetrics: PerformanceMetrics = {
     renderTime: 0,
     highlightRenderTime: 0,
@@ -580,10 +591,10 @@ export class PerformanceOptimizer {
         lastTime = currentTime;
       }
 
-      requestAnimationFrame(monitorFPS);
+      this.rafId = requestAnimationFrame(monitorFPS);
     };
 
-    monitorFPS();
+    this.rafId = requestAnimationFrame(monitorFPS);
   }
 
   optimize(): void {
@@ -601,7 +612,12 @@ export class PerformanceOptimizer {
   }
 
   destroy(): void {
-    this.memoryManager.clear();
+    if (this.rafId !== null) {
+      cancelAnimationFrame(this.rafId);
+      this.rafId = null;
+    }
+
+    this.memoryManager.destroy();
     this.spatialIndex.clear();
     this.renderOptimizer.clearQueue();
 
