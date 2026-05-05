@@ -13,6 +13,8 @@ import {
   HighlightLabelStyle,
   ZoomValue,
   ThumbnailOptions,
+  PageRotationDegrees,
+  RotationDirection,
 } from './types';
 
 export interface PDFHighlightViewer {
@@ -31,6 +33,18 @@ export interface PDFHighlightViewer {
   getCurrentPage(): number;
 
   getTotalPages(): number;
+
+  /**
+   * Set extra clockwise display rotation for a page (on top of PDF intrinsic rotation).
+   * Pass degrees 0 to clear. For non-zero, direction selects CW vs CCW for that angle.
+   */
+  setPageDisplayRotation(
+    pageNumber: number,
+    degrees: PageRotationDegrees,
+    direction?: RotationDirection
+  ): void;
+
+  getPageDisplayRotation(pageNumber: number): PageRotationDegrees;
 
   getThumbnails(
     pageNumbers: number[],

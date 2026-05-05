@@ -37,9 +37,16 @@ export class PDFEngine {
   private thumbnailCache = new Map<string, HTMLCanvasElement>();
   private static readonly THUMBNAIL_DEFAULT_SCALE = 0.2;
   private static readonly THUMBNAIL_RENDER_CONCURRENCY = 3;
+  /** Cache key token when rotation is omitted — PDF.js uses intrinsic page rotation, not rotation 0. */
+  private static readonly THUMBNAIL_CACHE_INTRINSIC_ROTATION = 'def';
 
-  private static getThumbnailCacheKey(pageNumber: number, scale: number): string {
-    return `${pageNumber}:${scale.toFixed(4)}`;
+  private static getThumbnailCacheKey(
+    pageNumber: number,
+    scale: number,
+    rotation?: number
+  ): string {
+    const r = rotation === undefined ? this.THUMBNAIL_CACHE_INTRINSIC_ROTATION : String(rotation);
+    return `${pageNumber}:${scale.toFixed(4)}:${r}`;
   }
 
   constructor(private options: ViewerOptions = {}) {
@@ -141,24 +148,35 @@ export class PDFEngine {
   async renderPage(
     pageNumber: number,
     scale = 1.5,
-    canvas?: HTMLCanvasElement
+    canvas?: HTMLCanvasElement,
+    rotation?: number
   ): Promise<HTMLCanvasElement> {
     const pageData = this.pages.get(pageNumber);
     if (!pageData) {
       throw new Error(`Page ${pageNumber} not found`);
     }
 
-    if (pageData.rendered && pageData.canvas && pageData.scale === scale) {
+    const page = await this.getPage(pageNumber);
+    const viewport =
+      rotation !== undefined ? page.getViewport({ scale, rotation }) : page.getViewport({ scale });
+    const effectiveRotation = viewport.rotation;
+
+    if (
+      pageData.rendered &&
+      pageData.canvas &&
+      pageData.scale === scale &&
+      pageData.viewportRotation === effectiveRotation
+    ) {
       return pageData.canvas;
     }
 
-    if (pageData.rendered && pageData.scale !== scale) {
+    if (
+      pageData.rendered &&
+      (pageData.scale !== scale || pageData.viewportRotation !== effectiveRotation)
+    ) {
       pageData.rendered = false;
       pageData.canvas = undefined;
     }
-
-    const page = await this.getPage(pageNumber);
-    const viewport = page.getViewport({ scale });
 
     const renderCanvas = canvas || this.getCanvasFromPool();
     const context = renderCanvas.getContext('2d');
@@ -185,6 +203,7 @@ export class PDFEngine {
       pageData.rendered = true;
       pageData.loading = false;
       pageData.scale = scale;
+      pageData.viewportRotation = effectiveRotation;
 
       this.pages.set(pageNumber, pageData);
 
@@ -284,6 +303,7 @@ export class PDFEngine {
         page.canvas = undefined;
         page.rendered = false;
         page.textContent = undefined;
+        page.viewportRotation = undefined;
 
         this.pages.set(pageNumber, page);
       }
@@ -325,19 +345,27 @@ export class PDFEngine {
     }
 
     const page = await this.getPage(pageNumber);
+    const rotation = options?.viewportRotations?.[pageNumber];
+
     let scale = options?.scale ?? PDFEngine.THUMBNAIL_DEFAULT_SCALE;
     if (options?.maxWidth != null && options.maxWidth > 0) {
-      const baseViewport = page.getViewport({ scale: 1 });
+      const baseViewport = page.getViewport({
+        scale: 1,
+        ...(rotation !== undefined ? { rotation } : {}),
+      });
       scale = options.maxWidth / baseViewport.width;
     }
 
-    const cacheKey = PDFEngine.getThumbnailCacheKey(pageNumber, scale);
+    const cacheKey = PDFEngine.getThumbnailCacheKey(pageNumber, scale, rotation);
     const cached = this.thumbnailCache.get(cacheKey);
     if (cached) {
       return cached;
     }
 
-    const viewport = page.getViewport({ scale });
+    const viewport = page.getViewport({
+      scale,
+      ...(rotation !== undefined ? { rotation } : {}),
+    });
 
     const canvas = document.createElement('canvas');
     canvas.width = viewport.width;
@@ -402,6 +430,7 @@ export class PDFEngine {
       page.rendered = false;
       page.textContent = undefined;
       page.scale = undefined;
+      page.viewportRotation = undefined;
       this.pages.set(pageNumber, page);
     });
   }

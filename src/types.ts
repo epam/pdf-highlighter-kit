@@ -283,6 +283,8 @@ export interface Page {
   loading: boolean;
   viewport?: unknown;
   scale?: number;
+  /** PDF.js viewport rotation (clockwise degrees) used for the cached canvas, if rendered. */
+  viewportRotation?: number;
 }
 
 export interface HighlightsConfig {
@@ -291,6 +293,21 @@ export interface HighlightsConfig {
 }
 
 export type BBoxOrigin = 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right';
+
+/** Quadrant rotations in degrees (0, 90, 180, 270). Used for display delta and bbox math. */
+export type PageRotationDegrees = 0 | 90 | 180 | 270;
+
+/**
+ * @deprecated Use {@link PageRotationDegrees}. Kept for backward compatibility; same union.
+ */
+export type PageDisplayRotationClockwise = PageRotationDegrees;
+
+/** User rotation sense: clockwise or counter-clockwise (see `displayRotationToClockwise` in rotate-bbox). */
+export enum RotationDirection {
+  Clockwise = 'cw',
+  CounterClockwise = 'ccw',
+}
+
 export type PDFSource = string | ArrayBuffer | Blob;
 
 /** Options passed when loading a PDF (e.g. to override selected pages per load). */
@@ -312,6 +329,10 @@ export interface ViewerOptions {
   bboxSourceDimensions?: BBoxDimensions;
   /** Only show these document page numbers (1-based). If empty or omitted, all pages are shown. */
   selectedPages?: number[];
+  /**
+   * Initial extra clockwise rotation per 1-based page (0, 90, 180, 270), on top of the PDF intrinsic rotation.
+   */
+  pageDisplayRotations?: Record<number, PageRotationDegrees>;
 }
 
 export interface ThumbnailOptions {
@@ -321,6 +342,11 @@ export interface ThumbnailOptions {
   format?: 'image/jpeg' | 'image/webp' | 'image/png';
   /** Quality for jpeg/webp (0–1). Used by getThumbnailsDataUrl. Default 0.85. */
   quality?: number;
+  /**
+   * Per 1-based page: total PDF.js viewport rotation in degrees (clockwise).
+   * When omitted for a page, the PDF default rotation is used.
+   */
+  viewportRotations?: Record<number, number>;
 }
 
 export interface AccessibilityFeatures {

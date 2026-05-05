@@ -20,6 +20,11 @@ import {
   resolveHighlightStyle,
 } from '../utils/highlight-style';
 
+/** PDF.js viewport (or compatible) for positioning text in rotated display space. */
+export interface TextLayerViewport {
+  convertToViewportPoint: (x: number, y: number) => number[];
+}
+
 interface ItemHighlight {
   termId: string;
   coordinates: BoundingBox;
@@ -42,15 +47,22 @@ export class UnifiedLayerBuilder {
     textContent: TextContent,
     highlights: InputHighlightData[],
     pageNumber: number,
-    scale = 1.5
+    scale = 1.5,
+    viewport?: TextLayerViewport
   ): HTMLElement {
     this.pageContainer = pageContainer;
 
     const existing = pageContainer.querySelector('.unified-layer');
     if (existing) existing.remove();
 
-    const segments = this.segmentTextWithHighlights(textContent, highlights, pageNumber);
-    const unifiedLayer = this.buildDOM(segments, scale);
+    const segments = this.segmentTextWithHighlights(
+      textContent,
+      highlights,
+      pageNumber,
+      scale,
+      viewport
+    );
+    const unifiedLayer = this.buildDOM(segments, scale, viewport);
 
     this.positionLayer(unifiedLayer, pageContainer);
 
@@ -63,9 +75,10 @@ export class UnifiedLayerBuilder {
     highlights: InputHighlightData[],
     pageNumber: number,
     textContent: TextContent,
-    scale = 1.5
+    scale = 1.5,
+    viewport?: TextLayerViewport
   ): void {
-    this.buildUnifiedLayer(pageContainer, textContent, highlights, pageNumber, scale);
+    this.buildUnifiedLayer(pageContainer, textContent, highlights, pageNumber, scale, viewport);
   }
 
   private buildPageHighlights(
@@ -93,13 +106,17 @@ export class UnifiedLayerBuilder {
   private segmentTextWithHighlights(
     textContent: TextContent,
     highlights: InputHighlightData[],
-    pageNumber: number
+    pageNumber: number,
+    scale: number,
+    viewport?: TextLayerViewport
   ): Segment[] {
     const segments: Segment[] = [];
     const pageHighlights = this.buildPageHighlights(highlights, pageNumber);
 
     textContent.items.forEach((textItem) => {
-      const itemBounds = this.getTextItemBounds(textItem);
+      const itemBounds = viewport
+        ? this.getRotatedTextItemBounds(textItem, viewport, scale)
+        : this.getTextItemBounds(textItem);
       const itemHighlights = this.getHighlightsForTextItem(itemBounds, pageHighlights);
 
       if (itemHighlights.length === 0) {
@@ -111,7 +128,11 @@ export class UnifiedLayerBuilder {
           fontName: textItem.fontName,
         });
       } else {
-        const highlightedSegments = this.createHighlightedSegments(textItem, itemHighlights);
+        const highlightedSegments = this.createHighlightedSegments(
+          textItem,
+          itemHighlights,
+          itemBounds
+        );
         segments.push(...highlightedSegments);
       }
     });
@@ -132,10 +153,10 @@ export class UnifiedLayerBuilder {
 
   private createHighlightedSegments(
     textItem: TextItem,
-    itemHighlights: ItemHighlight[]
+    itemHighlights: ItemHighlight[],
+    itemBounds: BoundingBox
   ): Segment[] {
     const segments: Segment[] = [];
-    const itemBounds = this.getTextItemBounds(textItem);
 
     const primary = itemHighlights[0];
 
@@ -205,30 +226,38 @@ export class UnifiedLayerBuilder {
     };
   }
 
-  private buildDOM(segments: Segment[], scale: number): HTMLElement {
+  private buildDOM(segments: Segment[], scale: number, viewport?: TextLayerViewport): HTMLElement {
     const unifiedLayer = document.createElement('div');
     unifiedLayer.className = 'unified-layer';
 
     segments.forEach((segment) => {
       const el = segment.hasHighlight
-        ? this.createHighlightElement(segment, scale)
-        : this.createTextElement(segment, scale);
+        ? this.createHighlightElement(segment, scale, viewport)
+        : this.createTextElement(segment, scale, viewport);
       unifiedLayer.appendChild(el);
     });
 
     return unifiedLayer;
   }
 
-  private createTextElement(segment: Segment, scale: number): HTMLElement {
+  private createTextElement(
+    segment: Segment,
+    scale: number,
+    viewport?: TextLayerViewport
+  ): HTMLElement {
     const span = document.createElement('span');
     span.className = 'text-segment selectable';
     span.textContent = segment.text;
 
-    this.applyTextPositioning(span, segment, scale);
+    this.applyTextPositioning(span, segment, scale, viewport);
     return span;
   }
 
-  private createHighlightElement(segment: Segment, scale: number): HTMLElement {
+  private createHighlightElement(
+    segment: Segment,
+    scale: number,
+    viewport?: TextLayerViewport
+  ): HTMLElement {
     const wrapper = document.createElement('span');
     wrapper.className = 'highlight-wrapper';
     wrapper.setAttribute('data-term-id', segment.highlightInfo?.termId || '');
@@ -284,7 +313,7 @@ export class UnifiedLayerBuilder {
 
     this.applyInlineHighlightStyle(background, segment.highlightInfo?.style);
 
-    this.applyTextPositioning(wrapper, segment, scale);
+    this.applyTextPositioning(wrapper, segment, scale, viewport);
     wrapper.style.position = 'absolute';
     wrapper.style.userSelect = 'text';
 
@@ -325,19 +354,64 @@ export class UnifiedLayerBuilder {
     };
   }
 
+  /** Bounds in the same normalized display space as rotated highlight bboxes (divide viewport px by scale). */
+  private getRotatedTextItemBounds(
+    item: TextItem,
+    viewport: TextLayerViewport,
+    scale: number
+  ): BoundingBox {
+    const x = item.transform[4];
+    const y = item.transform[5];
+    const w = (item.width ?? 0) as number;
+    const h = (item.height ?? 0) as number;
+    const corners: [number, number][] = [
+      [x, y - h],
+      [x + w, y - h],
+      [x + w, y],
+      [x, y],
+    ];
+    let minX = Infinity;
+    let minY = Infinity;
+    let maxX = -Infinity;
+    let maxY = -Infinity;
+    const s = scale > 0 ? scale : 1;
+    for (const [cx, cy] of corners) {
+      const p = viewport.convertToViewportPoint(cx, cy);
+      const px = p[0] ?? 0;
+      const py = p[1] ?? 0;
+      minX = Math.min(minX, px / s);
+      minY = Math.min(minY, py / s);
+      maxX = Math.max(maxX, px / s);
+      maxY = Math.max(maxY, py / s);
+    }
+    return { x1: minX, y1: minY, x2: maxX, y2: maxY };
+  }
+
   private boundsIntersect(a: BoundingBox, b: BoundingBox): boolean {
     return !(a.x2 < b.x1 || a.x1 > b.x2 || a.y2 < b.y1 || a.y1 > b.y2);
   }
 
-  private applyTextPositioning(element: HTMLElement, segment: Segment, scale: number): void {
+  private applyTextPositioning(
+    element: HTMLElement,
+    segment: Segment,
+    scale: number,
+    viewport?: TextLayerViewport
+  ): void {
     const transform = segment.transform;
-    const x = transform[4] * scale;
-    const y = transform[5] * scale;
     const scaleX = transform[0] * scale;
     const scaleY = transform[3] * scale;
 
-    element.style.left = `${x}px`;
-    element.style.top = `${y}px`;
+    if (viewport) {
+      const p = viewport.convertToViewportPoint(transform[4], transform[5]);
+      element.style.left = `${p[0] ?? 0}px`;
+      element.style.top = `${p[1] ?? 0}px`;
+    } else {
+      const x = transform[4] * scale;
+      const y = transform[5] * scale;
+      element.style.left = `${x}px`;
+      element.style.top = `${y}px`;
+    }
+
     element.style.transform = `scale(${scaleX}, ${scaleY})`;
     element.style.transformOrigin = '0% 0%';
     element.style.whiteSpace = 'pre';
