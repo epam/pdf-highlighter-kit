@@ -37,13 +37,15 @@ export class PDFEngine {
   private thumbnailCache = new Map<string, HTMLCanvasElement>();
   private static readonly THUMBNAIL_DEFAULT_SCALE = 0.2;
   private static readonly THUMBNAIL_RENDER_CONCURRENCY = 3;
+  /** Cache key token when rotation is omitted — PDF.js uses intrinsic page rotation, not rotation 0. */
+  private static readonly THUMBNAIL_CACHE_INTRINSIC_ROTATION = 'def';
 
   private static getThumbnailCacheKey(
     pageNumber: number,
     scale: number,
     rotation?: number
   ): string {
-    const r = rotation === undefined ? 'def' : String(rotation);
+    const r = rotation === undefined ? this.THUMBNAIL_CACHE_INTRINSIC_ROTATION : String(rotation);
     return `${pageNumber}:${scale.toFixed(4)}:${r}`;
   }
 

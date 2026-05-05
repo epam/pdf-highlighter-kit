@@ -115,7 +115,7 @@ export class UnifiedLayerBuilder {
 
     textContent.items.forEach((textItem) => {
       const itemBounds = viewport
-        ? this.getTextItemBoundsDisplayNormalized(textItem, viewport, scale)
+        ? this.getRotatedTextItemBounds(textItem, viewport, scale)
         : this.getTextItemBounds(textItem);
       const itemHighlights = this.getHighlightsForTextItem(itemBounds, pageHighlights);
 
@@ -355,7 +355,7 @@ export class UnifiedLayerBuilder {
   }
 
   /** Bounds in the same normalized display space as rotated highlight bboxes (divide viewport px by scale). */
-  private getTextItemBoundsDisplayNormalized(
+  private getRotatedTextItemBounds(
     item: TextItem,
     viewport: TextLayerViewport,
     scale: number
