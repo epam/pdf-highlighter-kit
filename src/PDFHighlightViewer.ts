@@ -315,6 +315,12 @@ export class PDFHighlightViewer implements IPDFHighlightViewer {
         z-index: 10;
       }
       
+      .highlight-label {
+        max-width: 150px;
+        white-space: normal;
+        word-break: break-word;
+        flex-shrink: 1;
+      }
     `;
     document.head.appendChild(style);
   }
@@ -1789,12 +1795,14 @@ export class PDFHighlightViewer implements IPDFHighlightViewer {
             labelEl.style.zIndex = '3';
             labelEl.style.transform = 'translateX(-100%)';
             labelEl.style.display = 'flex';
-            labelEl.style.alignItems = 'center';
+            labelEl.style.alignItems = 'flex-start';
             labelEl.style.justifyContent = 'flex-end';
             labelEl.style.gap = highlight.isLabelScalable ? `${4 * scale}px` : '4px';
             labelEl.style.pointerEvents = 'auto';
             labelEl.style.cursor = 'pointer';
-            labelEl.style.whiteSpace = 'nowrap';
+            labelEl.style.whiteSpace = 'normal';
+            labelEl.style.wordBreak = 'break-word';
+            labelEl.style.maxWidth = `${left + labelOffsetLeft}px`;
 
             if (
               effectiveLabelStyle?.borderColor !== undefined ||
@@ -1811,7 +1819,10 @@ export class PDFHighlightViewer implements IPDFHighlightViewer {
 
             appendLabelIcon(labelEl, highlight.beforeIcon, effectiveLabelStyle);
             if (highlight.label) {
-              labelEl.appendChild(document.createTextNode(highlight.label));
+              const textSpan = document.createElement('span');
+              textSpan.style.minWidth = '0';
+              textSpan.textContent = highlight.label;
+              labelEl.appendChild(textSpan);
             }
 
             highlightLayer.appendChild(labelEl);
