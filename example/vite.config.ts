@@ -15,8 +15,10 @@ export default defineConfig({
   build: {
     rollupOptions: {
       output: {
-        manualChunks: {
-          'pdf-js': ['pdfjs-dist'],
+        manualChunks(id) {
+          if (id.includes('pdfjs-dist')) {
+            return 'pdf-js';
+          }
         },
       },
     },
