@@ -409,17 +409,22 @@ export class PDFHighlightViewer implements IPDFHighlightViewer {
 
     // Update current page
     if (visiblePages.length > 0) {
-      const newCurrentPage = visiblePages[0];
-      if (newCurrentPage !== this.currentPage) {
-        const previousPage = this.currentPage;
-        this.currentPage = newCurrentPage;
-        this.emit('pageChanged', {
-          currentPage: newCurrentPage,
-          previousPage: previousPage,
-          totalPages: this.totalPages,
-        });
-      }
+      this.updateCurrentPage(visiblePages[0]);
     }
+  }
+
+  /**
+   * Record `pageNumber` as the current page and emit `pageChanged` when it differs
+   */
+  private updateCurrentPage(pageNumber: number): void {
+    if (pageNumber === this.currentPage) return;
+    const previousPage = this.currentPage;
+    this.currentPage = pageNumber;
+    this.emit('pageChanged', {
+      currentPage: pageNumber,
+      previousPage,
+      totalPages: this.totalPages,
+    });
   }
 
   /**
@@ -760,6 +765,13 @@ export class PDFHighlightViewer implements IPDFHighlightViewer {
     if (this.container) {
       this.container.scrollTop = this.getPageScrollTop(pageNumber);
     }
+    /*
+     * Update the current page synchronously rather than waiting for the scroll
+     * event: a zoom re-render started before that event fires restores the
+     * scroll position from `currentPage`, and would otherwise return to the
+     * previous page.
+     */
+    this.updateCurrentPage(pageNumber);
   }
 
   getZoom(): number {
