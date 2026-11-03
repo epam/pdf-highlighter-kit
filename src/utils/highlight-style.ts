@@ -23,7 +23,7 @@ export function applyHighlightVisualStyle(
 
 export function resolveHighlightStyle(
   style?: HighlightStyle,
-  fallbackBackgroundColor = '#666666'
+  fallbackBackgroundColor = '#848e9c'
 ): ResolvedHighlightStyle {
   const backgroundColor = style?.backgroundColor ?? fallbackBackgroundColor;
   const borderColor = style?.borderColor ?? backgroundColor;

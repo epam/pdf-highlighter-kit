@@ -388,6 +388,24 @@ const highlight: InputHighlightData = {
 viewer.addHighlight(highlight);
 ```
 
+### Theming
+
+The viewer's colors follow the DIAL chat palette. Each color is a `--phk-*` CSS variable that reads the matching DIAL theme variable (`--bg-layer-base`, `--text-primary`, `--stroke-accent`, …). Inside a DIAL app the viewer therefore follows the active theme, dark included; elsewhere it uses the DIAL light palette.
+
+To restyle the viewer, override any `--phk-*` variable:
+
+```css
+.pdf-highlight-viewer,
+.pdf-context-menu,
+.pdf-tooltip {
+  --phk-bg: #ffffff;
+  --phk-accent: #0f766e;
+  --phk-yellow: #facc15; /* protein highlights and search results */
+}
+```
+
+The full list is at the top of `styles/pdf-highlight-viewer.css`.
+
 ### Label with icon (e.g. Tabler Icons)
 
 Pass an inline SVG string as `beforeIcon` to show an icon inside the label frame. Use trusted content only. With Vite you can import SVG as raw string:
