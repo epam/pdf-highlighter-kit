@@ -71,7 +71,6 @@ export class PDFEngine {
         try {
           extractPDFMetadata(base64String);
         } catch (metaError) {
-          // eslint-disable-next-line no-console
           console.warn('Could not extract PDF metadata:', metaError);
         }
       }
@@ -99,17 +98,20 @@ export class PDFEngine {
 
       if (error instanceof Error) {
         if (error.message.includes('Invalid PDF')) {
-          throw new Error('Invalid PDF format or corrupted file');
+          throw new Error('Invalid PDF format or corrupted file', { cause: error });
         } else if (error.message.includes('base64')) {
-          throw new Error('Invalid base64 PDF data - ensure the string is properly encoded');
+          throw new Error('Invalid base64 PDF data - ensure the string is properly encoded', {
+            cause: error,
+          });
         } else if (error.message.includes('fetch')) {
           throw new Error(
-            'Failed to load PDF from URL - check network connection and file availability'
+            'Failed to load PDF from URL - check network connection and file availability',
+            { cause: error }
           );
         }
       }
 
-      throw new Error('Failed to load PDF document');
+      throw new Error('Failed to load PDF document', { cause: error });
     }
   }
 

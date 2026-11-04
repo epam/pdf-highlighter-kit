@@ -2286,7 +2286,7 @@ export class PDFHighlightViewer implements IPDFHighlightViewer {
         const fontSize = Math.abs(scaleY) * this.currentScale;
 
         // Calculate text width with proper viewport scaling
-        let textWidth = 0;
+        let textWidth: number;
         if (item.width) {
           // Use PDF.js provided width and apply viewport scaling
           textWidth = item.width * this.currentScale;
