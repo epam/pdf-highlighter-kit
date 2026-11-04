@@ -220,7 +220,7 @@ export class PDFHighlightViewer implements IPDFHighlightViewer {
         width: 100%;
         height: 100%;
         overflow: auto;
-        background: #f5f5f5;
+        background: var(--phk-bg, var(--bg-layer-base, #f5f7fa));
       }
       
       .pdf-container {
@@ -232,7 +232,7 @@ export class PDFHighlightViewer implements IPDFHighlightViewer {
       .pdf-page-container {
         position: relative;
         margin: 0 auto 20px;
-        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+        box-shadow: 0 2px 8px var(--phk-shadow, var(--shadow-sm-2, #2764d90f));
         background: white;
         border-radius: 4px;
       }
@@ -282,7 +282,7 @@ export class PDFHighlightViewer implements IPDFHighlightViewer {
       .text-segment {
         position: relative;
         z-index: 1;
-        color: #333;
+        color: var(--phk-text, var(--text-primary, #161b2d));
         font-family: inherit;
         white-space: pre;
       }
@@ -297,7 +297,7 @@ export class PDFHighlightViewer implements IPDFHighlightViewer {
         display: flex;
         align-items: center;
         justify-content: center;
-        color: #666;
+        color: var(--phk-text-secondary, var(--text-secondary, #57647a));
       }
 
       .pdf-page-container.loading::after {
@@ -307,8 +307,8 @@ export class PDFHighlightViewer implements IPDFHighlightViewer {
         left: 50%;
         transform: translate(-50%, -50%);
         font-size: 12px;
-        color: #999;
-        background: rgba(255, 255, 255, 0.9);
+        color: var(--phk-text-tertiary, var(--text-tertiary, #848e9c));
+        background: var(--phk-bg-raised, var(--bg-layer-raised, #fcfcfc));
         padding: 4px 8px;
         border-radius: 4px;
         pointer-events: none;
@@ -1910,7 +1910,7 @@ export class PDFHighlightViewer implements IPDFHighlightViewer {
         backgroundColor: bg,
         borderColor,
         borderWidth,
-      } = resolveHighlightStyle(style, el.style.backgroundColor || '#666666');
+      } = resolveHighlightStyle(style, el.style.backgroundColor || '#848e9c');
 
       const visual = el.querySelector<HTMLElement>('.highlight-visual') ?? el;
       visual.style.backgroundColor = bg;
@@ -2138,7 +2138,7 @@ export class PDFHighlightViewer implements IPDFHighlightViewer {
       htmlElement.style.opacity = '0.75';
       htmlElement.style.filter = 'brightness(1.05) contrast(1.05) saturate(1.1)';
       htmlElement.style.boxShadow =
-        '0 0 0 1px rgba(255, 255, 255, 0.6), 0 0 4px rgba(102, 126, 234, 0.3)';
+        '0 0 0 1px rgba(255, 255, 255, 0.6), 0 0 4px var(--phk-accent-alpha, var(--stroke-accent-alpha, #2764d933))';
       htmlElement.style.transform = 'scale(1.02)';
       htmlElement.style.zIndex = '12';
       htmlElement.style.borderWidth = '1px';
@@ -2420,7 +2420,7 @@ export class PDFHighlightViewer implements IPDFHighlightViewer {
         htmlElement.style.opacity = '0.75';
         htmlElement.style.filter = 'brightness(1.05) contrast(1.05) saturate(1.1)';
         htmlElement.style.boxShadow =
-          '0 0 0 1px rgba(255, 255, 255, 0.6), 0 0 4px rgba(102, 126, 234, 0.3)';
+          '0 0 0 1px rgba(255, 255, 255, 0.6), 0 0 4px var(--phk-accent-alpha, var(--stroke-accent-alpha, #2764d933))';
         htmlElement.style.transform = 'scale(1.02)';
         htmlElement.style.zIndex = '12';
         htmlElement.style.borderWidth = '1px';

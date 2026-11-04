@@ -447,7 +447,7 @@ export class UnifiedLayerBuilder {
         div.highlight-wrapper.selected-term {
           opacity: 1 !important;
           filter: brightness(2) contrast(1.5) saturate(2) !important;
-          box-shadow: 0 0 0 3px rgba(255, 255, 255, 1), 0 0 10px rgba(255, 255, 0, 0.8), 0 0 20px rgba(255, 255, 0, 0.4) !important;
+          box-shadow: 0 0 0 3px rgba(255, 255, 255, 1), 0 0 10px color-mix(in srgb, var(--phk-yellow, var(--stroke-warning, #eec840)) 80%, transparent), 0 0 20px color-mix(in srgb, var(--phk-yellow, var(--stroke-warning, #eec840)) 40%, transparent) !important;
           z-index: 15 !important;
           transform: scale(1.1) !important;
           transition: all 0.3s ease !important;

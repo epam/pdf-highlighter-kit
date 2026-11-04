@@ -17,6 +17,7 @@ import React, {
 } from 'react';
 import { ButtonVariant, DialButton, DialDropdown } from '@epam/ai-dial-ui-kit';
 import '@epam/ai-dial-ui-kit/styles.css';
+import '../../../src/styles/pdf-highlight-viewer.css';
 
 const PDF_URL = 'https://ontheline.trincoll.edu/images/bookdown/sample-local-pdf.pdf';
 
