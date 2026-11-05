@@ -14,14 +14,16 @@ import {
   extractPDFMetadata,
   detectPDFSourceType,
 } from '../utils/pdf-utils';
+import { getDefaultWorkerCdnUrl } from '../utils/worker-loader-simple';
 
 if (!pdfjsLib.GlobalWorkerOptions.workerSrc) {
-  pdfjsLib.GlobalWorkerOptions.workerSrc =
-    'https://unpkg.com/pdfjs-dist@5.4.149/build/pdf.worker.min.mjs';
+  pdfjsLib.GlobalWorkerOptions.workerSrc = getDefaultWorkerCdnUrl();
 }
 
 export class PDFEngine {
   private pdfDocument: pdfjsLib.PDFDocumentProxy | null = null;
+  /* PDF.js 6 removed `PDFDocumentProxy.destroy()`; the loading task releases the document on 5 and 6. */
+  private loadingTask: pdfjsLib.PDFDocumentLoadingTask | null = null;
   private pages = new Map<number, Page>();
   private renderingQueue: RenderingQueue = {
     high: [],
@@ -83,6 +85,7 @@ export class PDFEngine {
         disableRange: sourceType !== 'url',
         disableStream: sourceType === 'base64' || sourceType === 'blob',
       });
+      this.loadingTask = loadingTask;
 
       this.pdfDocument = await loadingTask.promise;
 
@@ -438,9 +441,12 @@ export class PDFEngine {
   }
 
   destroy(): void {
-    if (this.pdfDocument) {
-      this.pdfDocument.destroy();
-      this.pdfDocument = null;
+    const loadingTask = this.loadingTask;
+    this.loadingTask = null;
+    this.pdfDocument = null;
+    if (loadingTask) {
+      /* Also cancels a load still in flight; the caller is tearing down, so a failed release is not reported. */
+      loadingTask.destroy().catch(() => undefined);
     }
 
     this.pages.clear();

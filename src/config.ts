@@ -1,3 +1,5 @@
+import { getDefaultWorkerCdnUrl } from './utils/worker-loader-simple';
+
 export interface PDFViewerConfig {
   workerSrc?: string | null;
 
@@ -48,7 +50,7 @@ export function getWorkerSrc(): string {
 }
 
 function getDefaultWorkerSrc(): string {
-  return 'https://unpkg.com/pdfjs-dist@5.4.149/build/pdf.worker.min.mjs';
+  return getDefaultWorkerCdnUrl();
 }
 
 export function resetConfig(): void {
