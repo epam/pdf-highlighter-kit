@@ -483,7 +483,7 @@ export function PDFViewer({
 
 ## Requirements
 
-- `pdfjs-dist`: ^5.4.149 (peer dependency)
+- `pdfjs-dist`: ^5.4.149 || ^6.0.0 (peer dependency)
 
 ## License
 

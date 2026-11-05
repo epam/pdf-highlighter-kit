@@ -1,6 +1,11 @@
 /* eslint-disable no-console */
 import * as pdfjsLib from 'pdfjs-dist';
 
+/** Returns the unpkg URL of the worker that matches the installed `pdfjs-dist` version. */
+export function getDefaultWorkerCdnUrl(): string {
+  return `https://unpkg.com/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.min.mjs`;
+}
+
 export async function setupWorker(
   options: {
     workerSrc?: string;
@@ -48,7 +53,7 @@ export async function setupWorker(
   }
 
   if (cdnFallback) {
-    const cdnUrl = 'https://unpkg.com/pdfjs-dist@5.4.149/build/pdf.worker.min.mjs';
+    const cdnUrl = getDefaultWorkerCdnUrl();
     pdfjsLib.GlobalWorkerOptions.workerSrc = cdnUrl;
     if (debug) console.log('[Worker] Using CDN fallback:', cdnUrl);
     return cdnUrl;
@@ -60,7 +65,7 @@ export async function setupWorker(
     if (debug) console.log('[Worker] Using package path:', fallbackPath);
     return fallbackPath;
   } catch {
-    const cdnUrl = 'https://unpkg.com/pdfjs-dist@5.4.149/build/pdf.worker.min.mjs';
+    const cdnUrl = getDefaultWorkerCdnUrl();
     pdfjsLib.GlobalWorkerOptions.workerSrc = cdnUrl;
     if (debug) console.log('[Worker] Final CDN fallback:', cdnUrl);
     return cdnUrl;
