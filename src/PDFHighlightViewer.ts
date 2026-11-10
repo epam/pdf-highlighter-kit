@@ -73,6 +73,15 @@ export class PDFHighlightViewer implements IPDFHighlightViewer {
   };
   private currentPage = 1;
   private currentScale = 1.5;
+  /* Keep one PDF-space anchor across zooms, including rounded/clamped scroll positions. */
+  private zoomAnchor: {
+    pageNumber: number;
+    pageY: number;
+    viewportY: number;
+    scrollTop: number;
+  } | null = null;
+  private zoomLayoutPending = false;
+  private layoutVersion = 0;
   private totalPages = 0;
   /** Actual number of pages in the loaded PDF (1..documentNumPages). */
   private documentNumPages = 0;
@@ -201,6 +210,12 @@ export class PDFHighlightViewer implements IPDFHighlightViewer {
     // Setup container styles
     this.container.style.position = 'relative';
     this.container.style.overflow = 'auto';
+    /*
+     * This viewer restores its own reading position during zoom. Native scroll
+     * anchoring can apply another adjustment after async canvas/text rendering,
+     * shifting the viewport and making the next zoom capture the wrong anchor.
+     */
+    this.container.style.overflowAnchor = 'none';
   }
 
   /**
@@ -293,7 +308,6 @@ export class PDFHighlightViewer implements IPDFHighlightViewer {
       
       /* Loading states */
       .pdf-page-container.loading {
-        min-height: 800px;
         display: flex;
         align-items: center;
         justify-content: center;
@@ -351,6 +365,30 @@ export class PDFHighlightViewer implements IPDFHighlightViewer {
     this.container.addEventListener('scroll', this.scrollListener);
   }
 
+  /** Use actual page bounds: average heights drift for mixed-size documents. */
+  private getViewportPages(): { visiblePages: number[]; currentPage: number } {
+    const visiblePages: number[] = [];
+    let currentPage = this.currentPage;
+    let largestVisibleHeight = 0;
+    if (!this.container) return { visiblePages, currentPage };
+
+    const top = this.container.scrollTop;
+    const bottom = top + this.container.clientHeight;
+    for (const [pageNumber, element] of this.pageContainers) {
+      const pageTop = this.getPageScrollTop(pageNumber);
+      const visibleHeight =
+        Math.min(bottom, pageTop + element.offsetHeight) - Math.max(top, pageTop);
+      if (visibleHeight <= 0) continue;
+      visiblePages.push(pageNumber);
+      /* A small tail of the preceding page must not replace the cited page. */
+      if (visibleHeight > largestVisibleHeight) {
+        largestVisibleHeight = visibleHeight;
+        currentPage = pageNumber;
+      }
+    }
+    return { visiblePages, currentPage };
+  }
+
   private getPageScrollTop(pageNumber: number): number {
     const el = this.pageContainers.get(pageNumber);
     if (el) return el.offsetTop;
@@ -361,13 +399,9 @@ export class PDFHighlightViewer implements IPDFHighlightViewer {
    * Handle scroll events for virtual viewport management
    */
   private handleScroll(): void {
-    if (!this.container) return;
+    if (!this.container || this.zoomLayoutPending) return;
 
-    const scrollTop = this.container.scrollTop;
-    const containerHeight = this.container.clientHeight;
-
-    // Get what pages should be visible
-    const visiblePages = this.viewportManager.getVisiblePages(scrollTop, containerHeight);
+    const { visiblePages, currentPage } = this.getViewportPages();
     const bufferPages = this.viewportManager.getBufferPages(visiblePages, 1);
 
     // 1. RENDER VISIBLE PAGES IMMEDIATELY - No delays, no complex logic
@@ -383,6 +417,7 @@ export class PDFHighlightViewer implements IPDFHighlightViewer {
 
     // 2. RENDER BUFFER PAGES WITH SMALL DELAY
     setTimeout(() => {
+      if (this.zoomLayoutPending) return;
       bufferPages.forEach((pageNumber) => {
         const pageContainer = this.pageContainers.get(pageNumber);
         if (pageContainer && !pageContainer.classList.contains('rendered')) {
@@ -396,7 +431,11 @@ export class PDFHighlightViewer implements IPDFHighlightViewer {
     // 3. UNLOAD DISTANT PAGES (simple logic)
     const allRelevantPages = new Set([...visiblePages, ...bufferPages]);
     this.pageContainers.forEach((pageContainer, pageNumber) => {
-      if (!allRelevantPages.has(pageNumber) && pageContainer.classList.contains('rendered')) {
+      if (
+        !allRelevantPages.has(pageNumber) &&
+        (pageContainer.classList.contains('rendered') ||
+          pageContainer.querySelector(':scope > .pdf-zoom-preview'))
+      ) {
         const distance = Math.min(...visiblePages.map((vp) => Math.abs(pageNumber - vp)));
         if (distance > 5) {
           // Only unload if really far
@@ -409,7 +448,7 @@ export class PDFHighlightViewer implements IPDFHighlightViewer {
 
     // Update current page
     if (visiblePages.length > 0) {
-      this.updateCurrentPage(visiblePages[0]);
+      this.updateCurrentPage(currentPage);
     }
   }
 
@@ -552,6 +591,10 @@ export class PDFHighlightViewer implements IPDFHighlightViewer {
     if (!this.isInitialized) {
       throw new Error('Viewer must be initialized before loading PDF');
     }
+
+    this.zoomAnchor = null;
+    this.zoomLayoutPending = false;
+    this.layoutVersion++;
 
     try {
       await this.pdfEngine.loadDocument(source);
@@ -701,7 +744,9 @@ export class PDFHighlightViewer implements IPDFHighlightViewer {
    */
   private async renderPage(pageNumber: number): Promise<void> {
     const pageContainer = this.pageContainers.get(pageNumber);
-    if (!pageContainer) return;
+    if (!pageContainer || this.zoomLayoutPending) return;
+    const layoutVersion = this.layoutVersion;
+    const renderScale = this.currentScale;
 
     // Check if already rendered
     if (pageContainer.classList.contains('rendered')) {
@@ -709,25 +754,32 @@ export class PDFHighlightViewer implements IPDFHighlightViewer {
     }
 
     try {
-      // Add loading state
-      pageContainer.classList.add('loading');
+      // Keep the previous raster visible without a loading overlay during zoom.
+      if (!pageContainer.querySelector('canvas')) pageContainer.classList.add('loading');
 
       const pdfPage = await this.pdfEngine.getPage(pageNumber);
+      if (layoutVersion !== this.layoutVersion) return;
       const effectiveRotation = this.effectiveViewportRotationDegrees(pdfPage.rotate, pageNumber);
 
       // Render PDF canvas
       const canvas = await this.pdfEngine.renderPage(
         pageNumber,
-        this.currentScale,
+        renderScale,
         undefined,
         effectiveRotation
       );
 
-      // Clear container and add canvas
+      if (layoutVersion !== this.layoutVersion) return;
+
+      // Replace the old image only once the new raster is ready.
       pageContainer.innerHTML = '';
       pageContainer.appendChild(canvas);
-      pageContainer.style.height = `${canvas.height}px`;
-      pageContainer.style.width = `${canvas.width}px`;
+      const dimensions = this.pageDimensions.get(pageNumber);
+      pageContainer.style.height = `${dimensions?.height ?? canvas.height}px`;
+      pageContainer.style.width = `${dimensions?.width ?? canvas.width}px`;
+      canvas.style.width = '100%';
+      canvas.style.height = '100%';
+      canvas.style.display = 'block';
       pageContainer.style.position = 'relative';
 
       // Add text layer for selection (must be added before highlights)
@@ -735,6 +787,8 @@ export class PDFHighlightViewer implements IPDFHighlightViewer {
 
       // Add simple highlight overlays
       await this.addHighlightsToPage(pageNumber, canvas.width, canvas.height);
+
+      if (layoutVersion !== this.layoutVersion) return;
 
       // Mark as rendered and remove loading state
       pageContainer.classList.add('rendered');
@@ -758,12 +812,26 @@ export class PDFHighlightViewer implements IPDFHighlightViewer {
     });
   }
 
+  /** Keep an explicit navigation target at its current viewport position during zoom. */
+  private rememberNavigationAnchor(pageNumber: number, pageY = 0): void {
+    if (!this.container) return;
+    const scrollTop = this.container.scrollTop;
+    this.zoomAnchor = {
+      pageNumber,
+      pageY,
+      viewportY: this.getPageScrollTop(pageNumber) + pageY * this.currentScale - scrollTop,
+      scrollTop,
+    };
+  }
+
   setPage(pageNumber: number): void {
     const displayed = this.getDisplayedPageList();
     if (!displayed.includes(pageNumber)) return;
+    this.zoomAnchor = null;
 
     if (this.container) {
       this.container.scrollTop = this.getPageScrollTop(pageNumber);
+      this.rememberNavigationAnchor(pageNumber);
     }
     /*
      * Update the current page synchronously rather than waiting for the scroll
@@ -793,7 +861,7 @@ export class PDFHighlightViewer implements IPDFHighlightViewer {
     this.currentScale = Math.max(0.5, Math.min(5.0, scale));
 
     // Re-render visible pages with new scale
-    this.reRenderVisiblePages();
+    void this.reRenderVisiblePages(previousScale);
 
     this.emit('zoomChanged', { scale: this.currentScale, previousScale });
   }
@@ -1150,37 +1218,80 @@ export class PDFHighlightViewer implements IPDFHighlightViewer {
   /**
    * Re-render visible pages (e.g., after zoom change)
    */
-  private async reRenderVisiblePages(): Promise<void> {
+  private async reRenderVisiblePages(previousScale?: number): Promise<void> {
     if (!this.container) return;
 
-    const pageToKeep = this.currentPage;
+    const layoutVersion = ++this.layoutVersion;
+    if (previousScale === undefined) {
+      this.zoomAnchor = null;
+    } else if (
+      !this.zoomAnchor ||
+      (!this.zoomLayoutPending &&
+        Math.abs(this.container.scrollTop - this.zoomAnchor.scrollTop) > 1)
+    ) {
+      const pageNumber = this.getViewportPages().currentPage;
+      const offset = this.container.scrollTop - this.getPageScrollTop(pageNumber);
+      this.zoomAnchor = {
+        pageNumber,
+        pageY: Math.max(0, offset) / previousScale,
+        viewportY: Math.max(0, -offset),
+        scrollTop: this.container.scrollTop,
+      };
+    }
+    const anchor = this.zoomAnchor;
+    const pageToKeep = anchor?.pageNumber ?? this.getViewportPages().currentPage;
+    const offsetToKeep = anchor ? anchor.pageY * this.currentScale - anchor.viewportY : 0;
+    this.zoomLayoutPending = previousScale !== undefined;
 
-    // Clear ALL cached data for the new scale
-    this.pdfEngine.clearAllPageCache();
+    /* Keep mounted canvases alive. The engine invalidates them by scale/rotation;
+     * clearing its canvas pool here would erase images still on screen. */
     this.pageDimensions.clear();
     this.intrinsicPageNormalized.clear();
-
-    // Clear all containers and update their sizes for new scale
+    const nextDimensions = new Map<number, { width: number; height: number }>();
     let totalHeight = 0;
     let validDimensions = 0;
 
+    /* Prepare asynchronously without mutating the visible document. */
     for (const [pageNumber, pageContainer] of this.pageContainers) {
-      // Clear content
-      pageContainer.innerHTML = '';
-      pageContainer.classList.remove('rendered');
-
-      // Get new dimensions for the new scale
       try {
-        const newDimensions = await this.getPageDimensions(pageNumber);
-        pageContainer.style.height = `${newDimensions.height}px`;
-        pageContainer.style.width = `${newDimensions.width}px`;
-
-        // Track for average calculation
-        totalHeight += newDimensions.height;
+        const dimensions = await this.getPageDimensions(pageNumber);
+        if (layoutVersion !== this.layoutVersion) return;
+        nextDimensions.set(pageNumber, dimensions);
+        totalHeight += dimensions.height;
         validDimensions++;
       } catch {
-        pageContainer.style.height = `${this.defaultPageHeight}px`;
+        if (layoutVersion !== this.layoutVersion) return;
+        nextDimensions.set(pageNumber, {
+          width: parseFloat(pageContainer.style.width) || pageContainer.offsetWidth,
+          height: this.defaultPageHeight,
+        });
       }
+    }
+
+    /* Commit page geometry and scroll together, with no asynchronous gap. Keep a
+     * scaled copy of the existing DOM until each replacement raster is ready. */
+    for (const [pageNumber, pageContainer] of this.pageContainers) {
+      const dimensions = nextDimensions.get(pageNumber)!;
+      if (pageContainer.childElementCount > 0) {
+        let preview = pageContainer.querySelector<HTMLElement>(':scope > .pdf-zoom-preview');
+        if (!preview) {
+          preview = document.createElement('div');
+          preview.className = 'pdf-zoom-preview';
+          preview.style.width = pageContainer.style.width;
+          preview.style.height = pageContainer.style.height;
+          preview.style.position = 'absolute';
+          preview.style.inset = '0';
+          preview.style.transformOrigin = '0 0';
+          while (pageContainer.firstChild) preview.appendChild(pageContainer.firstChild);
+          pageContainer.appendChild(preview);
+        }
+        const width = parseFloat(preview.style.width) || dimensions.width;
+        const height = parseFloat(preview.style.height) || dimensions.height;
+        preview.style.transform = `scale(${dimensions.width / width}, ${dimensions.height / height})`;
+      }
+      pageContainer.classList.remove('rendered', 'loading');
+      pageContainer.style.height = `${dimensions.height}px`;
+      pageContainer.style.width = `${dimensions.width}px`;
     }
 
     // Calculate new average page height and update viewport manager
@@ -1188,21 +1299,17 @@ export class PDFHighlightViewer implements IPDFHighlightViewer {
       validDimensions > 0 ? totalHeight / validDimensions : this.defaultPageHeight;
     this.viewportManager.updateDimensions(this.container?.clientHeight || 600, avgPageHeight);
 
-    // Render currently visible pages
-    const containerHeight = this.container.clientHeight;
+    // Restore the reading position after all page containers have their new sizes.
+    this.container.scrollTop = Math.max(0, this.getPageScrollTop(pageToKeep) + offsetToKeep);
+    if (anchor) anchor.scrollTop = this.container.scrollTop;
+    this.zoomLayoutPending = false;
+    this.updateCurrentPage(pageToKeep);
 
-    // Restore scroll so we stay on the same page after zoom
-    this.container.scrollTop = this.getPageScrollTop(pageToKeep);
-
-    // Recompute visible pages after scroll restore for correct rendering
-    const scrollTopAfterRestore = this.container.scrollTop;
-    const visiblePagesAfterRestore = this.viewportManager.getVisiblePages(
-      scrollTopAfterRestore,
-      containerHeight
-    );
+    const { visiblePages: visiblePagesAfterRestore } = this.getViewportPages();
 
     // Render visible pages immediately
     for (const pageNumber of visiblePagesAfterRestore) {
+      if (layoutVersion !== this.layoutVersion) return;
       try {
         await this.renderPage(pageNumber);
       } catch (error) {
@@ -1346,6 +1453,7 @@ export class PDFHighlightViewer implements IPDFHighlightViewer {
         const pageTop = pageContainer.offsetTop;
         const y = normalizedBBox.y1 * this.currentScale;
         this.container.scrollTop = Math.max(0, pageTop + y - 60);
+        this.rememberNavigationAnchor(page, normalizedBBox.y1);
 
         this.emit('navigationComplete', { termId, pageNumber: page, occurrenceIndex });
       })
@@ -1389,6 +1497,7 @@ export class PDFHighlightViewer implements IPDFHighlightViewer {
       pageTop + normalizedBBox.y1 * this.currentScale - this.container.clientHeight * 0.3;
 
     this.container.scrollTop = Math.max(0, targetY);
+    this.rememberNavigationAnchor(pageNumber, normalizedBBox.y1);
 
     this.emit('coordinateNavigation', { pageNumber, x, y });
   }
@@ -2450,6 +2559,9 @@ export class PDFHighlightViewer implements IPDFHighlightViewer {
   // =============================================================================
 
   destroy(): void {
+    this.zoomAnchor = null;
+    this.zoomLayoutPending = false;
+    this.layoutVersion++;
     // Remove event listeners
     if (this.scrollListener && this.container) {
       this.container.removeEventListener('scroll', this.scrollListener);

@@ -260,11 +260,11 @@ Navigate to a specific page (1-based).
 
 #### `zoomIn(): void` / `zoomOut(): void`
 
-Zoom in or out of the PDF.
+Zoom in or out of the PDF while preserving the reading position. After navigation to a page, highlight, or coordinate, that target stays at the same viewport position during zoom, even when a neighboring page occupies more of the viewport. The same page and PDF-space position stay anchored across successive zoom changes, including when adjacent pages become more visible at a smaller scale. Scrolling or explicit page navigation establishes a new anchor. Page detection uses actual page bounds, including for documents with mixed page sizes. Zoom commits page sizes and scrolling together; the previous page image remains scaled on screen until the new raster is ready, without changing page height for loading indicators.
 
 #### `setZoom(value: ZoomMode | number): void`
 
-Set a specific zoom level (e.g., 1.0 for 100%, 1.5 for 150%).
+Set a specific zoom level (e.g., 1.0 for 100%, 1.5 for 150%). The reading position is preserved as with `zoomIn()` and `zoomOut()`.
 
 #### `getThumbnails(pageNumbers: number[], options?: ThumbnailOptions): Promise<Map<number, HTMLCanvasElement>>`
 
