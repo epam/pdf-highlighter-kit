@@ -285,6 +285,8 @@ export interface Page {
   scale?: number;
   /** PDF.js viewport rotation (clockwise degrees) used for the cached canvas, if rendered. */
   viewportRotation?: number;
+  /** Device pixels per CSS pixel in the cached canvas's backing store, if rendered. */
+  outputScale?: number;
 }
 
 export interface HighlightsConfig {
@@ -333,6 +335,18 @@ export interface ViewerOptions {
    * Initial extra clockwise rotation per 1-based page (0, 90, 180, 270), on top of the PDF intrinsic rotation.
    */
   pageDisplayRotations?: Record<number, PageRotationDegrees>;
+  /**
+   * Upper bound for the page canvas pixel ratio. Pages render at
+   * `window.devicePixelRatio` up to this value so text stays sharp on HiDPI
+   * displays. Default `2`; `1` renders in CSS pixels as before.
+   */
+  maxPixelRatio?: number;
+  /**
+   * Upper bound for one page canvas area in pixels; the pixel ratio drops
+   * below `maxPixelRatio` when a page would exceed it. Default `16777216`
+   * (2^24, the iOS Safari limit); `0` disables the cap.
+   */
+  maxCanvasPixels?: number;
 }
 
 export interface ThumbnailOptions {

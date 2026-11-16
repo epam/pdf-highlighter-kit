@@ -189,6 +189,15 @@ export interface ViewerOptions {
   // Performance mode (smaller frame budget)
   performanceMode?: boolean;
 
+  // Upper bound for the page canvas pixel ratio. Pages render at
+  // window.devicePixelRatio up to this value so text stays sharp on HiDPI
+  // displays. Default: 2; 1 renders in CSS pixels (lighter, blurrier).
+  maxPixelRatio?: number;
+
+  // Upper bound for one page canvas area in pixels; the ratio drops below
+  // maxPixelRatio when a page would exceed it. Default: 16777216 (2^24); 0 disables.
+  maxCanvasPixels?: number;
+
   // Enable accessibility helpers
   accessibility?: boolean;
 

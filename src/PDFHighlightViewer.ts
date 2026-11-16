@@ -154,6 +154,10 @@ export class PDFHighlightViewer implements IPDFHighlightViewer {
 
     // Merge options
     this.options = { ...this.options, ...options };
+    this.pdfEngine.setOutputScaleOptions({
+      maxPixelRatio: this.options.maxPixelRatio,
+      maxCanvasPixels: this.options.maxCanvasPixels,
+    });
 
     // Store container reference
     this.container = container;
@@ -774,9 +778,9 @@ export class PDFHighlightViewer implements IPDFHighlightViewer {
       // Replace the old image only once the new raster is ready.
       pageContainer.innerHTML = '';
       pageContainer.appendChild(canvas);
-      const dimensions = this.pageDimensions.get(pageNumber);
-      pageContainer.style.height = `${dimensions?.height ?? canvas.height}px`;
-      pageContainer.style.width = `${dimensions?.width ?? canvas.width}px`;
+      const pageSize = this.getPageCssSize(pageNumber, canvas);
+      pageContainer.style.height = `${pageSize.height}px`;
+      pageContainer.style.width = `${pageSize.width}px`;
       canvas.style.width = '100%';
       canvas.style.height = '100%';
       canvas.style.display = 'block';
@@ -786,7 +790,7 @@ export class PDFHighlightViewer implements IPDFHighlightViewer {
       await this.addTextLayerToPage(pageNumber);
 
       // Add simple highlight overlays
-      await this.addHighlightsToPage(pageNumber, canvas.width, canvas.height);
+      await this.addHighlightsToPage(pageNumber, pageSize.width, pageSize.height);
 
       if (layoutVersion !== this.layoutVersion) return;
 
@@ -1209,7 +1213,8 @@ export class PDFHighlightViewer implements IPDFHighlightViewer {
         // Re-add highlights to already rendered pages
         const canvas = pageContainer.querySelector('canvas');
         if (canvas) {
-          this.addHighlightsToPage(pageNumber, canvas.width, canvas.height);
+          const pageSize = this.getPageCssSize(pageNumber, canvas);
+          this.addHighlightsToPage(pageNumber, pageSize.width, pageSize.height);
         }
       }
     });
@@ -1725,7 +1730,23 @@ export class PDFHighlightViewer implements IPDFHighlightViewer {
     const canvas = pageContainer.querySelector('canvas') as HTMLCanvasElement | null;
     if (!canvas) return;
 
-    this.addHighlightsToPage(pageNumber, canvas.width, canvas.height);
+    const pageSize = this.getPageCssSize(pageNumber, canvas);
+    this.addHighlightsToPage(pageNumber, pageSize.width, pageSize.height);
+  }
+
+  /**
+   * Page size in CSS pixels. The canvas backing store is in device pixels
+   * (see `getOutputScale`), so its `width`/`height` are not layout sizes.
+   */
+  private getPageCssSize(
+    pageNumber: number,
+    canvas: HTMLCanvasElement
+  ): { width: number; height: number } {
+    const dimensions = this.pageDimensions.get(pageNumber);
+    if (dimensions) return dimensions;
+
+    const outputScale = Number(canvas.dataset.outputScale) || 1;
+    return { width: canvas.width / outputScale, height: canvas.height / outputScale };
   }
 
   /**

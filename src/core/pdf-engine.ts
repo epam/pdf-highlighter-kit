@@ -15,6 +15,7 @@ import {
   detectPDFSourceType,
 } from '../utils/pdf-utils';
 import { getDefaultWorkerCdnUrl } from '../utils/worker-loader-simple';
+import { getOutputScale, OutputScaleOptions } from '../utils/output-scale';
 
 if (!pdfjsLib.GlobalWorkerOptions.workerSrc) {
   pdfjsLib.GlobalWorkerOptions.workerSrc = getDefaultWorkerCdnUrl();
@@ -51,8 +52,22 @@ export class PDFEngine {
     return `${pageNumber}:${scale.toFixed(4)}:${r}`;
   }
 
+  private outputScaleOptions: OutputScaleOptions;
+
   constructor(private options: ViewerOptions = {}) {
+    this.outputScaleOptions = {
+      maxPixelRatio: options.maxPixelRatio,
+      maxCanvasPixels: options.maxCanvasPixels,
+    };
     this.initializeCanvasPool();
+  }
+
+  /**
+   * Updates the backing-store limits used by later `renderPage` calls. The
+   * viewer merges its options in `init`, after the engine was constructed.
+   */
+  setOutputScaleOptions(options: OutputScaleOptions): void {
+    this.outputScaleOptions = { ...options };
   }
 
   setPageRenderCallback(callback: (pageNumber: number) => Promise<void>): void {
@@ -165,19 +180,24 @@ export class PDFEngine {
     const viewport =
       rotation !== undefined ? page.getViewport({ scale, rotation }) : page.getViewport({ scale });
     const effectiveRotation = viewport.rotation;
+    /* Recomputed on every call: the ratio changes when the window moves to another display. */
+    const outputScale = getOutputScale(viewport.width, viewport.height, this.outputScaleOptions);
 
     if (
       pageData.rendered &&
       pageData.canvas &&
       pageData.scale === scale &&
-      pageData.viewportRotation === effectiveRotation
+      pageData.viewportRotation === effectiveRotation &&
+      pageData.outputScale === outputScale
     ) {
       return pageData.canvas;
     }
 
     if (
       pageData.rendered &&
-      (pageData.scale !== scale || pageData.viewportRotation !== effectiveRotation)
+      (pageData.scale !== scale ||
+        pageData.viewportRotation !== effectiveRotation ||
+        pageData.outputScale !== outputScale)
     ) {
       pageData.rendered = false;
       pageData.canvas = undefined;
@@ -190,13 +210,20 @@ export class PDFEngine {
       throw new Error('Failed to get 2D context');
     }
 
-    renderCanvas.width = viewport.width;
-    renderCanvas.height = viewport.height;
+    /*
+     * The backing store is sized in device pixels and PDF.js draws into it
+     * through `transform`; the canvas keeps its CSS size through the page
+     * container, so layout, the text layer and highlights stay in CSS pixels.
+     */
+    renderCanvas.width = Math.floor(viewport.width * outputScale);
+    renderCanvas.height = Math.floor(viewport.height * outputScale);
+    renderCanvas.dataset.outputScale = String(outputScale);
 
     const renderContext = {
       canvasContext: context,
       viewport: viewport,
       canvas: renderCanvas,
+      transform: outputScale !== 1 ? [outputScale, 0, 0, outputScale, 0, 0] : undefined,
     };
 
     try {
@@ -209,6 +236,7 @@ export class PDFEngine {
       pageData.loading = false;
       pageData.scale = scale;
       pageData.viewportRotation = effectiveRotation;
+      pageData.outputScale = outputScale;
 
       this.pages.set(pageNumber, pageData);
 
