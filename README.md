@@ -275,6 +275,8 @@ Zoom in or out of the PDF while preserving the reading position. After navigatio
 
 Set a specific zoom level (e.g., 1.0 for 100%, 1.5 for 150%). The reading position is preserved as with `zoomIn()` and `zoomOut()`.
 
+`ZoomMode.AUTO` fits the page width to the viewer container, and `ZoomMode.PAGE_FIT` fits the whole page. Both modes stay active: when the container is resized, the viewer re-fits the page after a 100 ms debounce. `ZoomMode.AUTO` reacts only to width changes. A numeric `setZoom()`, `zoomIn()`, `zoomOut()` or `resetZoom()` switches to a fixed scale that does not change on resize.
+
 #### `getThumbnails(pageNumbers: number[], options?: ThumbnailOptions): Promise<Map<number, HTMLCanvasElement>>`
 
 Render page thumbnails (miniatures) for the given page numbers. Returns a `Map` of page number → canvas. Use this when you need canvas elements (e.g. for drawing or custom display). Options: `maxWidth` (target width in px), `scale` (viewport scale).
