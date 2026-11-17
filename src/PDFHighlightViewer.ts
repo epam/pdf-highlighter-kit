@@ -51,6 +51,11 @@ import { sumPdfIntrinsicAndUserRotation } from './utils/pdf-rotation-math';
 
 const CONTAINER_PADDING = 40;
 const ZOOM_STEP = 1.2;
+/** Trailing debounce for re-fitting the page while the container is being resized. */
+const FIT_ZOOM_RESIZE_DEBOUNCE_MS = 100;
+/** Scale differences below this are treated as unchanged, so a re-fit does not re-render for nothing. */
+const FIT_ZOOM_EPSILON = 0.001;
+type FitZoomMode = ZoomMode.AUTO | ZoomMode.PAGE_FIT;
 type EventCallback = (data?: unknown) => void;
 
 export class PDFHighlightViewer implements IPDFHighlightViewer {
@@ -81,6 +86,14 @@ export class PDFHighlightViewer implements IPDFHighlightViewer {
     scrollTop: number;
   } | null = null;
   private zoomLayoutPending = false;
+  /* Fit mode the reader selected, kept so the scale follows container resizes; `null` = fixed scale. */
+  private fitZoomMode: FitZoomMode | null = null;
+  /* Incremented by every zoom request, so a fit computed for an outdated request is dropped. */
+  private zoomRequestId = 0;
+  private resizeObserver: ResizeObserver | null = null;
+  private fitResizeTimer: ReturnType<typeof setTimeout> | null = null;
+  /* Border-box size, which a vertical scrollbar appearing or disappearing does not change. */
+  private lastContainerSize: { width: number; height: number } | null = null;
   private layoutVersion = 0;
   private totalPages = 0;
   /** Actual number of pages in the loaded PDF (1..documentNumPages). */
@@ -173,6 +186,9 @@ export class PDFHighlightViewer implements IPDFHighlightViewer {
 
     // Setup scroll handling
     this.setupScrollHandling();
+
+    // Keep fit zoom modes in sync with the container size
+    this.setupResizeHandling();
 
     // Initialize accessibility if enabled
     if (this.options.accessibility) {
@@ -851,18 +867,27 @@ export class PDFHighlightViewer implements IPDFHighlightViewer {
   }
 
   setZoom(value: ZoomValue): void {
-    if (value === ZoomMode.AUTO) {
-      void this.setAutoZoom();
-    } else if (value === ZoomMode.PAGE_FIT) {
-      void this.setPageFitZoom();
+    if (value === ZoomMode.AUTO || value === ZoomMode.PAGE_FIT) {
+      this.fitZoomMode = value;
+      this.cancelFitResize();
+      this.lastContainerSize = this.readContainerSize();
+      void this.applyFitZoom(value, false);
     } else {
-      this.applyZoom(value);
+      this.setFixedZoom(value);
     }
+  }
+
+  /** Leaves any fit mode and applies a fixed scale. */
+  private setFixedZoom(scale: number): void {
+    this.fitZoomMode = null;
+    this.zoomRequestId++;
+    this.cancelFitResize();
+    this.applyZoom(scale);
   }
 
   private applyZoom(scale: number): void {
     const previousScale = this.currentScale;
-    this.currentScale = Math.max(0.5, Math.min(5.0, scale));
+    this.currentScale = this.clampScale(scale);
 
     // Re-render visible pages with new scale
     void this.reRenderVisiblePages(previousScale);
@@ -870,14 +895,66 @@ export class PDFHighlightViewer implements IPDFHighlightViewer {
     this.emit('zoomChanged', { scale: this.currentScale, previousScale });
   }
 
-  private async setAutoZoom(): Promise<void> {
+  /**
+   * Applies the scale of a fit mode. With `skipIfUnchanged`, a scale equal to
+   * the current one is not re-applied, so a resize that keeps the fit does not
+   * re-render the pages.
+   */
+  private async applyFitZoom(mode: FitZoomMode, skipIfUnchanged: boolean): Promise<void> {
+    const requestId = ++this.zoomRequestId;
     const scales = await this.computeFitScales();
-    this.applyZoom(scales.scaleX);
+    if (requestId !== this.zoomRequestId || this.fitZoomMode !== mode) return;
+    const scale = mode === ZoomMode.AUTO ? scales.scaleX : Math.min(scales.scaleX, scales.scaleY);
+    if (!Number.isFinite(scale) || scale <= 0) return;
+    if (
+      skipIfUnchanged &&
+      Math.abs(this.clampScale(scale) - this.currentScale) < FIT_ZOOM_EPSILON
+    ) {
+      return;
+    }
+    this.applyZoom(scale);
   }
 
-  private async setPageFitZoom(): Promise<void> {
-    const scales = await this.computeFitScales();
-    this.applyZoom(Math.min(scales.scaleX, scales.scaleY));
+  private clampScale(scale: number): number {
+    return Math.max(0.5, Math.min(5.0, scale));
+  }
+
+  private setupResizeHandling(): void {
+    if (!this.container || typeof ResizeObserver === 'undefined') return;
+    this.lastContainerSize = this.readContainerSize();
+    this.resizeObserver = new ResizeObserver(() => this.handleContainerResize());
+    this.resizeObserver.observe(this.container);
+  }
+
+  private readContainerSize(): { width: number; height: number } | null {
+    if (!this.container) return null;
+    return { width: this.container.offsetWidth, height: this.container.offsetHeight };
+  }
+
+  /** Re-fits the page, debounced, when the container size that the active fit mode depends on changes. */
+  private handleContainerResize(): void {
+    const size = this.readContainerSize();
+    const previous = this.lastContainerSize;
+    this.lastContainerSize = size;
+    const mode = this.fitZoomMode;
+    // A hidden (zero-size) container has nothing to fit; the next visible size re-fits.
+    if (!mode || !size || size.width === 0 || size.height === 0) return;
+    const hasWidthChanged = previous?.width !== size.width;
+    const hasHeightChanged = previous?.height !== size.height;
+    // Auto fits the width only; page fit depends on both dimensions.
+    if (!hasWidthChanged && !(mode === ZoomMode.PAGE_FIT && hasHeightChanged)) return;
+    this.cancelFitResize();
+    this.fitResizeTimer = setTimeout(() => {
+      this.fitResizeTimer = null;
+      if (this.fitZoomMode === mode) void this.applyFitZoom(mode, true);
+    }, FIT_ZOOM_RESIZE_DEBOUNCE_MS);
+  }
+
+  private cancelFitResize(): void {
+    if (this.fitResizeTimer !== null) {
+      clearTimeout(this.fitResizeTimer);
+      this.fitResizeTimer = null;
+    }
   }
 
   private async computeFitScales(): Promise<{ scaleX: number; scaleY: number }> {
@@ -894,15 +971,15 @@ export class PDFHighlightViewer implements IPDFHighlightViewer {
   }
 
   zoomIn(): void {
-    this.applyZoom(this.currentScale * ZOOM_STEP);
+    this.setFixedZoom(this.currentScale * ZOOM_STEP);
   }
 
   zoomOut(): void {
-    this.applyZoom(this.currentScale / ZOOM_STEP);
+    this.setFixedZoom(this.currentScale / ZOOM_STEP);
   }
 
   resetZoom(): void {
-    this.applyZoom(1.5);
+    this.setFixedZoom(1.5);
   }
 
   getCurrentPage(): number {
@@ -2582,6 +2659,12 @@ export class PDFHighlightViewer implements IPDFHighlightViewer {
   destroy(): void {
     this.zoomAnchor = null;
     this.zoomLayoutPending = false;
+    this.fitZoomMode = null;
+    this.zoomRequestId++;
+    this.cancelFitResize();
+    this.resizeObserver?.disconnect();
+    this.resizeObserver = null;
+    this.lastContainerSize = null;
     this.layoutVersion++;
     // Remove event listeners
     if (this.scrollListener && this.container) {
